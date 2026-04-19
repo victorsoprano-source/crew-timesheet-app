@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronLeft, ChevronRight, Save, Plus, Trash2, Loader2, CheckCircle, Camera, X, ImageIcon } from "lucide-react"
-import { getWorkers, type Worker } from "@/app/actions/workers"
+import { getWorkers, getActiveWorkers, type Worker } from "@/app/actions/workers"
 import { 
   getOrCreateTimesheet, 
   getTimesheetEntriesForDay, 
@@ -144,6 +144,7 @@ export function Timesheet() {
       const dayEntries = await getTimesheetEntriesForDay(currentTimesheet.id, selectedDay.date)
       
       if (dayEntries.length > 0) {
+        // Day has saved entries - load them
         const mappedEntries: TimesheetEntry[] = dayEntries.map((e) => ({
           id: e.id,
           worker_id: e.worker_id,
@@ -159,7 +160,27 @@ export function Timesheet() {
         }))
         setEntries(mappedEntries)
       } else {
-        setEntries([])
+        // No entries for this day - auto-populate with active workers
+        const activeWorkers = await getActiveWorkers()
+        
+        if (activeWorkers.length > 0) {
+          const autoEntries: TimesheetEntry[] = activeWorkers.map((worker) => ({
+            id: `temp-${worker.id}-${Date.now()}`,
+            worker_id: worker.id,
+            name: worker.name,
+            trade: worker.trade,
+            regular: "0",
+            overtime: "0",
+            doubleTime: "0",
+            status: "Present" as const,
+            jobCode: "",
+            photoRefId: "",
+            notes: "",
+          }))
+          setEntries(autoEntries)
+        } else {
+          setEntries([])
+        }
       }
     } catch (err) {
       // Don't show error - just show empty entries
@@ -260,6 +281,7 @@ return { ...e, [field]: value }
     return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
+  // Add an extra worker (for workers not in the auto-loaded list)
   const addEntry = () => {
     const newEntry: TimesheetEntry = {
       id: `temp-${Date.now()}`,
@@ -610,14 +632,16 @@ return { ...e, [field]: value }
 
           {entries.length === 0 && (
             <Card className="p-8 bg-card border-border text-center">
-              <p className="text-muted-foreground mb-4">No entries for {selectedDay?.dayName} yet.</p>
+              <p className="text-muted-foreground mb-4">
+                No active workers found. Add workers to your Crew List and mark them as Active.
+              </p>
               <Button 
                 variant="outline" 
                 className="border-border text-foreground hover:bg-secondary"
                 onClick={addEntry}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add First Entry
+                Add Worker Manually
               </Button>
             </Card>
           )}
@@ -633,7 +657,7 @@ return { ...e, [field]: value }
           disabled={availableWorkers.length === 0}
         >
           <Plus className="h-4 w-4 mr-2" />
-          Add Worker
+          Add Extra Worker
         </Button>
         <Button 
           className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
