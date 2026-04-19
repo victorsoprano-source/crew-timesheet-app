@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Phone, Award, User, Loader2, RefreshCw, Pencil, Trash2, X, Wrench, FileCheck } from "lucide-react"
+import { Search, Phone, Award, User, Loader2, RefreshCw, Pencil, Trash2, X, Wrench, FileCheck, Camera, Images } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +58,11 @@ export function CrewList({ onNavigate }: CrewListProps) {
     status: "active" as Worker["status"],
   })
   const [isSaving, setIsSaving] = useState(false)
+  
+  // Edit photo state
+  const [editPhotoPathname, setEditPhotoPathname] = useState<string | null>(null)
+  const [editPhotoPreviewUrl, setEditPhotoPreviewUrl] = useState<string | null>(null)
+  const [isUploadingEditPhoto, setIsUploadingEditPhoto] = useState(false)
   
   // Photo preview state
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; name: string } | null>(null)
@@ -119,6 +124,54 @@ export function CrewList({ onNavigate }: CrewListProps) {
     return `https://xnfkvgjkjsjndpofwueb.supabase.co/storage/v1/object/public/${pathname}`
   }
 
+  const handleEditPhotoUpload = async (file: File) => {
+    setIsUploadingEditPhoto(true)
+    
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      setEditPhotoPathname(result.pathname)
+      setEditPhotoPreviewUrl(`/api/file?pathname=${encodeURIComponent(result.pathname)}`)
+    } catch (err) {
+      console.error("Edit photo upload error:", err)
+    } finally {
+      setIsUploadingEditPhoto(false)
+    }
+  }
+
+  const handleEditPhotoSelect = (useCamera: boolean = false) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    if (useCamera) {
+      input.capture = 'environment'
+    }
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        handleEditPhotoUpload(file)
+      }
+    }
+    input.click()
+  }
+
+  const removeEditPhoto = () => {
+    setEditPhotoPathname(null)
+    setEditPhotoPreviewUrl(null)
+  }
+
   const handleStatusChange = (workerId: string, newStatus: Worker["status"]) => {
     startTransition(async () => {
       await updateWorkerStatus(workerId, newStatus)
@@ -136,6 +189,13 @@ export function CrewList({ onNavigate }: CrewListProps) {
       certifications: worker.certifications || [],
       status: worker.status,
     })
+    // Initialize photo state from worker
+    setEditPhotoPathname(worker.photo_pathname || null)
+    if (worker.photo_pathname) {
+      setEditPhotoPreviewUrl(`/api/file?pathname=${encodeURIComponent(worker.photo_pathname)}`)
+    } else {
+      setEditPhotoPreviewUrl(null)
+    }
   }
 
   const closeEditModal = () => {
@@ -148,6 +208,8 @@ export function CrewList({ onNavigate }: CrewListProps) {
       certifications: [],
       status: "active",
     })
+    setEditPhotoPathname(null)
+    setEditPhotoPreviewUrl(null)
   }
 
   const toggleEditCertification = (cert: string) => {
@@ -163,7 +225,10 @@ export function CrewList({ onNavigate }: CrewListProps) {
     if (!editingWorker) return
     
     setIsSaving(true)
-    const result = await updateWorker(editingWorker.id, editFormData)
+    const result = await updateWorker(editingWorker.id, {
+      ...editFormData,
+      photo_pathname: editPhotoPathname,
+    })
     setIsSaving(false)
     
     if (result.success) {
@@ -356,6 +421,79 @@ export function CrewList({ onNavigate }: CrewListProps) {
             </div>
             
             <div className="p-4 flex flex-col gap-4">
+              {/* Profile Photo Section */}
+              <div className="flex flex-col gap-3">
+                <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <Camera className="h-4 w-4 text-muted-foreground" />
+                  Profile Photo
+                </Label>
+                
+                <div className="flex items-center gap-4">
+                  {/* Photo Preview */}
+                  <div className="relative">
+                    {editPhotoPreviewUrl ? (
+                      <div className="h-20 w-20 rounded-full overflow-hidden ring-2 ring-primary/30">
+                        <img
+                          src={editPhotoPreviewUrl}
+                          alt="Profile preview"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
+                        <User className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                    {isUploadingEditPhoto && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-full">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Photo Action Buttons */}
+                  <div className="flex flex-col gap-2 flex-1">
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditPhotoSelect(true)}
+                        disabled={isSaving || isUploadingEditPhoto}
+                        className="flex-1 border-border text-foreground hover:bg-secondary"
+                      >
+                        <Camera className="h-4 w-4 mr-1" />
+                        Camera
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditPhotoSelect(false)}
+                        disabled={isSaving || isUploadingEditPhoto}
+                        className="flex-1 border-border text-foreground hover:bg-secondary"
+                      >
+                        <Images className="h-4 w-4 mr-1" />
+                        Gallery
+                      </Button>
+                    </div>
+                    {editPhotoPathname && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={removeEditPhoto}
+                        disabled={isSaving || isUploadingEditPhoto}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove Photo
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Name Field */}
               <div className="flex flex-col gap-2">
                 <Label className="text-sm font-medium text-foreground flex items-center gap-2">

@@ -94,6 +94,7 @@ export async function createWorker(formData: {
   trade: string
   phone: string
   level: WorkerLevel
+  photo_pathname?: string
   certifications: string[]
   documentedCertifications?: CertificationInput[]
 }): Promise<{ success: boolean; workerId?: string; error?: string }> {
@@ -104,6 +105,7 @@ export async function createWorker(formData: {
     trade: formData.trade,
     phone: formData.phone || null,
     level: formData.level,
+    photo_pathname: formData.photo_pathname || null,
     certifications: formData.certifications,
     status: "active",
   }).select("id").single()
@@ -170,6 +172,7 @@ export async function updateWorker(
     trade: string
     phone: string
     level: WorkerLevel
+    photo_pathname?: string | null
     certifications: string[]
     status: "active" | "off-site" | "on-leave"
   }
@@ -183,6 +186,7 @@ export async function updateWorker(
       trade: formData.trade,
       phone: formData.phone || null,
       level: formData.level,
+      photo_pathname: formData.photo_pathname ?? undefined,
       certifications: formData.certifications,
       status: formData.status,
       updated_at: new Date().toISOString(),

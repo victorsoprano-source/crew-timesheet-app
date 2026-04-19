@@ -48,6 +48,60 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
     level: "Journeyman" as WorkerLevel,
   })
 
+  // Profile photo state
+  const [profilePhotoPathname, setProfilePhotoPathname] = useState<string | null>(null)
+  const [profilePhotoPreviewUrl, setProfilePhotoPreviewUrl] = useState<string | null>(null)
+  const [isUploadingProfilePhoto, setIsUploadingProfilePhoto] = useState(false)
+
+  // Profile photo upload handlers
+  const handleProfilePhotoUpload = async (file: File) => {
+    setIsUploadingProfilePhoto(true)
+    
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      setProfilePhotoPathname(result.pathname)
+      setProfilePhotoPreviewUrl(`/api/file?pathname=${encodeURIComponent(result.pathname)}`)
+    } catch (err) {
+      console.error("Profile photo upload error:", err)
+    } finally {
+      setIsUploadingProfilePhoto(false)
+    }
+  }
+
+  const handleProfilePhotoSelect = (useCamera: boolean = false) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    if (useCamera) {
+      input.capture = 'environment'
+    }
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        handleProfilePhotoUpload(file)
+      }
+    }
+    input.click()
+  }
+
+  const removeProfilePhoto = () => {
+    setProfilePhotoPathname(null)
+    setProfilePhotoPreviewUrl(null)
+  }
+
   // Certification state
   const [pendingCerts, setPendingCerts] = useState<PendingCertification[]>([])
   const [showCertForm, setShowCertForm] = useState(false)
@@ -140,6 +194,7 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
     startTransition(async () => {
       const result = await createWorker({
         ...formData,
+        photo_pathname: profilePhotoPathname || undefined,
         certifications: [], // Legacy field - now using documentedCertifications
         documentedCertifications: pendingCerts.map(c => ({
           certificationType: c.certificationType,
@@ -152,6 +207,8 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
       if (result.success) {
         setSuccess(true)
         setFormData({ name: "", trade: "", phone: "", level: "Journeyman" })
+        setProfilePhotoPathname(null)
+        setProfilePhotoPreviewUrl(null)
         setPendingCerts([])
         onSuccess?.()
         
@@ -193,6 +250,79 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
       {/* Form */}
       <Card className="p-4 bg-card border-border">
         <div className="flex flex-col gap-5">
+          {/* Profile Photo Section */}
+          <div className="flex flex-col gap-3">
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Camera className="h-4 w-4 text-muted-foreground" />
+              Profile Photo
+            </Label>
+            
+            <div className="flex items-center gap-4">
+              {/* Photo Preview */}
+              <div className="relative">
+                {profilePhotoPreviewUrl ? (
+                  <div className="h-20 w-20 rounded-full overflow-hidden ring-2 ring-primary/30">
+                    <img
+                      src={profilePhotoPreviewUrl}
+                      alt="Profile preview"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
+                    <User className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+                {isUploadingProfilePhoto && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-full">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                )}
+              </div>
+
+              {/* Photo Action Buttons */}
+              <div className="flex flex-col gap-2 flex-1">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleProfilePhotoSelect(true)}
+                    disabled={isPending || isUploadingProfilePhoto}
+                    className="flex-1 border-border text-foreground hover:bg-secondary"
+                  >
+                    <Camera className="h-4 w-4 mr-1" />
+                    Camera
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleProfilePhotoSelect(false)}
+                    disabled={isPending || isUploadingProfilePhoto}
+                    className="flex-1 border-border text-foreground hover:bg-secondary"
+                  >
+                    <Images className="h-4 w-4 mr-1" />
+                    Gallery
+                  </Button>
+                </div>
+                {profilePhotoPathname && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={removeProfilePhoto}
+                    disabled={isPending || isUploadingProfilePhoto}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Remove Photo
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Name Field */}
           <div className="flex flex-col gap-2">
             <Label className="text-sm font-medium text-foreground flex items-center gap-2">
