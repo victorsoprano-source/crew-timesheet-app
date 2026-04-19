@@ -18,11 +18,20 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { getWeeklyTotalsFromTimesheets, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
 
+// Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
+const getCurrentDayIndex = () => {
+  const today = new Date()
+  const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+  // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+  const dayMap: Record<number, number> = { 3: 0, 4: 1, 5: 2, 6: 3, 0: 4, 1: 5, 2: 6 }
+  return dayMap[dayOfWeek] ?? 0
+}
+
 export function DailyReports() {
   const [weeklyReport, setWeeklyReport] = useState<WeeklyTotalsReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0)
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0) // 0 = Wednesday, 6 = Tuesday
+  const [selectedDayIndex, setSelectedDayIndex] = useState(getCurrentDayIndex) // Default to current day
   const [photos, setPhotos] = useState<ReportPhoto[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [previewImage, setPreviewImage] = useState<string | null>(null)

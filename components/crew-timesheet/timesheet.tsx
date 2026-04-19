@@ -64,9 +64,18 @@ interface TimesheetEntry {
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Operator", "HVAC Technician", "Painter", "Heavy Equipment Operator"]
 const statuses: ("Present" | "Absent" | "Late")[] = ["Present", "Absent", "Late"]
 
+// Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
+const getCurrentDayIndex = () => {
+  const today = new Date()
+  const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+  // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+  const dayMap: Record<number, number> = { 3: 0, 4: 1, 5: 2, 6: 3, 0: 4, 1: 5, 2: 6 }
+  return dayMap[dayOfWeek] ?? 0
+}
+
 export function Timesheet() {
   const [weekOffset, setWeekOffset] = useState(0)
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0)
+  const [selectedDayIndex, setSelectedDayIndex] = useState(getCurrentDayIndex)
   const [entries, setEntries] = useState<TimesheetEntry[]>([])
   const [workers, setWorkers] = useState<Worker[]>([])
   const [currentTimesheet, setCurrentTimesheet] = useState<TimesheetType | null>(null)
@@ -169,9 +178,9 @@ export function Timesheet() {
             worker_id: worker.id,
             name: worker.name,
             trade: worker.trade,
-            regular: "0",
-            overtime: "0",
-            doubleTime: "0",
+            regular: "",
+            overtime: "",
+            doubleTime: "",
             status: "Present" as const,
             jobCode: "",
             photoRefId: "",
@@ -288,9 +297,9 @@ return { ...e, [field]: value }
       worker_id: "",
       name: "",
       trade: "",
-      regular: "0",
-      overtime: "0",
-      doubleTime: "0",
+      regular: "",
+      overtime: "",
+      doubleTime: "",
       status: "Present",
       jobCode: "",
       photoRefId: "",
@@ -526,8 +535,9 @@ return { ...e, [field]: value }
                     <label className="text-xs text-muted-foreground mb-1 block">ST</label>
                     <Input
                       type="number"
-                      value={entry.status === "Absent" ? 0 : parseFloat(entry.regular) || 0}
+                      value={entry.status === "Absent" ? "" : (entry.regular === "0" || entry.regular === "" ? "" : entry.regular)}
                       onChange={(e) => updateEntry(entry.id, "regular", e.target.value)}
+                      placeholder="0"
                       className={`bg-input border-border text-foreground text-center h-9 ${entry.status === "Absent" ? "opacity-50 cursor-not-allowed" : ""}`}
                       min="0"
                       step="0.5"
@@ -539,8 +549,9 @@ return { ...e, [field]: value }
                   <label className="text-xs text-muted-foreground mb-1 block">OT</label>
                   <Input
                     type="number"
-                    value={entry.status === "Absent" ? 0 : parseFloat(entry.overtime) || 0}
+                    value={entry.status === "Absent" ? "" : (entry.overtime === "0" || entry.overtime === "" ? "" : entry.overtime)}
                     onChange={(e) => updateEntry(entry.id, "overtime", e.target.value)}
+                    placeholder="0"
                     className={`bg-input border-border text-foreground text-center h-9 ${entry.status === "Absent" ? "opacity-50 cursor-not-allowed" : ""}`}
                     min="0"
                     step="0.5"
@@ -551,8 +562,9 @@ return { ...e, [field]: value }
                   <label className="text-xs text-muted-foreground mb-1 block">DT</label>
                   <Input
                     type="number"
-                    value={entry.status === "Absent" ? 0 : parseFloat(entry.doubleTime) || 0}
+                    value={entry.status === "Absent" ? "" : (entry.doubleTime === "0" || entry.doubleTime === "" ? "" : entry.doubleTime)}
                     onChange={(e) => updateEntry(entry.id, "doubleTime", e.target.value)}
+                    placeholder="0"
                     className={`bg-input border-border text-foreground text-center h-9 ${entry.status === "Absent" ? "opacity-50 cursor-not-allowed" : ""}`}
                     min="0"
                     step="0.5"

@@ -28,8 +28,16 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Default to Wednesday (index 0) - same as Reports default
-  const selectedDayIndex = 0
+  // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
+  const getCurrentDayIndex = () => {
+    const today = new Date()
+    const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+    // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+    const dayMap: Record<number, number> = { 3: 0, 4: 1, 5: 2, 6: 3, 0: 4, 1: 5, 2: 6 }
+    return dayMap[dayOfWeek] ?? 0
+  }
+
+  const selectedDayIndex = getCurrentDayIndex()
 
   const loadData = async () => {
     setIsLoading(true)
