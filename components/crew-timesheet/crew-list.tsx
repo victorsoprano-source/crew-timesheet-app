@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Phone, Award, User, Loader2, RefreshCw, Pencil, Trash2, X, Wrench, FileCheck, Camera, Images } from "lucide-react"
+import { Search, Phone, Award, User, Loader2, RefreshCw, Pencil, Trash2, X, Wrench, FileCheck, Camera, Images, Eye, Plus, Calendar } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { getWorkers, getWorkerStats, updateWorkerStatus, updateWorker, deleteWorker, type Worker, type WorkerLevel } from "@/app/actions/workers"
+import { getWorkers, getWorkerStats, updateWorkerStatus, updateWorker, deleteWorker, getWorkerCertifications, addWorkerCertification, updateWorkerCertification, deleteWorkerCertification, type Worker, type WorkerLevel, type WorkerCertification } from "@/app/actions/workers"
 
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Heavy Equipment Operator", "HVAC Technician", "Painter"]
 
@@ -70,6 +70,27 @@ export function CrewList({ onNavigate }: CrewListProps) {
   // Delete confirmation state
   const [workerToDelete, setWorkerToDelete] = useState<Worker | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  
+  // View Worker modal state
+  const [viewingWorker, setViewingWorker] = useState<Worker | null>(null)
+  const [viewWorkerCerts, setViewWorkerCerts] = useState<WorkerCertification[]>([])
+  const [isLoadingViewCerts, setIsLoadingViewCerts] = useState(false)
+  
+  // Edit Worker certifications state
+  const [editWorkerCerts, setEditWorkerCerts] = useState<WorkerCertification[]>([])
+  const [isLoadingEditCerts, setIsLoadingEditCerts] = useState(false)
+  const [showAddCertForm, setShowAddCertForm] = useState(false)
+  const [newCertForm, setNewCertForm] = useState({
+    certificationType: "",
+    issueDate: "",
+    expirationDate: "",
+    photoPathname: "",
+    photoPreviewUrl: "",
+  })
+  const [isUploadingCertPhoto, setIsUploadingCertPhoto] = useState(false)
+  const [isSavingCert, setIsSavingCert] = useState(false)
+  const [editingCertId, setEditingCertId] = useState<string | null>(null)
+  const [certPhotoPreview, setCertPhotoPreview] = useState<string | null>(null)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -122,9 +143,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
     if (!pathname) return null
     if (pathname.startsWith("http")) return pathname
     // Use the /api/file endpoint to retrieve Vercel Blob stored files
-    const url = `/api/file?pathname=${encodeURIComponent(pathname)}`
-    console.log("[v0] getPhotoUrl for worker:", pathname, "->", url)
-    return url
+    return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
   const handleEditPhotoUpload = async (file: File) => {
@@ -175,6 +194,130 @@ export function CrewList({ onNavigate }: CrewListProps) {
     setEditPhotoPreviewUrl(null)
   }
 
+  // View Worker modal functions
+  const openViewModal = async (worker: Worker) => {
+    setViewingWorker(worker)
+    setIsLoadingViewCerts(true)
+    try {
+      const certs = await getWorkerCertifications(worker.id)
+      setViewWorkerCerts(certs)
+    } catch (err) {
+      console.error("Error loading certifications:", err)
+      setViewWorkerCerts([])
+    }
+    setIsLoadingViewCerts(false)
+  }
+
+  const closeViewModal = () => {
+    setViewingWorker(null)
+    setViewWorkerCerts([])
+  }
+
+  // Certification photo upload handlers
+  const handleCertPhotoUpload = async (file: File) => {
+    setIsUploadingCertPhoto(true)
+    
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      setNewCertForm(prev => ({
+        ...prev,
+        photoPathname: result.pathname,
+        photoPreviewUrl: `/api/file?pathname=${encodeURIComponent(result.pathname)}`,
+      }))
+    } catch (err) {
+      console.error("Cert photo upload error:", err)
+    } finally {
+      setIsUploadingCertPhoto(false)
+    }
+  }
+
+  const handleCertPhotoSelect = (useCamera: boolean = false) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    if (useCamera) {
+      input.capture = 'environment'
+    }
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        handleCertPhotoUpload(file)
+      }
+    }
+    input.click()
+  }
+
+  const removeCertPhoto = () => {
+    setNewCertForm(prev => ({
+      ...prev,
+      photoPathname: "",
+      photoPreviewUrl: "",
+    }))
+  }
+
+  // Add certification handler
+  const handleAddCertification = async () => {
+    if (!editingWorker || !newCertForm.certificationType || !newCertForm.expirationDate) return
+    
+    setIsSavingCert(true)
+    try {
+      const result = await addWorkerCertification({
+        workerId: editingWorker.id,
+        certificationType: newCertForm.certificationType,
+        photoPathname: newCertForm.photoPathname || undefined,
+        issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
+        expirationDate: newCertForm.expirationDate,
+      })
+      
+      if (result.success) {
+        // Refresh certifications list
+        const certs = await getWorkerCertifications(editingWorker.id)
+        setEditWorkerCerts(certs)
+        // Reset form
+        setNewCertForm({
+          certificationType: "",
+          issueDate: "",
+          expirationDate: "",
+          photoPathname: "",
+          photoPreviewUrl: "",
+        })
+        setShowAddCertForm(false)
+      }
+    } catch (err) {
+      console.error("Error adding certification:", err)
+    } finally {
+      setIsSavingCert(false)
+    }
+  }
+
+  // Delete certification handler
+  const handleDeleteCertification = async (certId: string) => {
+    if (!editingWorker) return
+    
+    try {
+      const result = await deleteWorkerCertification(certId)
+      if (result.success) {
+        const certs = await getWorkerCertifications(editingWorker.id)
+        setEditWorkerCerts(certs)
+      }
+    } catch (err) {
+      console.error("Error deleting certification:", err)
+    }
+  }
+
   const handleStatusChange = (workerId: string, newStatus: Worker["status"]) => {
     startTransition(async () => {
       await updateWorkerStatus(workerId, newStatus)
@@ -182,7 +325,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
     })
   }
 
-  const openEditModal = (worker: Worker) => {
+  const openEditModal = async (worker: Worker) => {
     setEditingWorker(worker)
     setEditFormData({
       name: worker.name,
@@ -199,6 +342,16 @@ export function CrewList({ onNavigate }: CrewListProps) {
     } else {
       setEditPhotoPreviewUrl(null)
     }
+    // Load certifications
+    setIsLoadingEditCerts(true)
+    try {
+      const certs = await getWorkerCertifications(worker.id)
+      setEditWorkerCerts(certs)
+    } catch (err) {
+      console.error("Error loading certifications:", err)
+      setEditWorkerCerts([])
+    }
+    setIsLoadingEditCerts(false)
   }
 
   const closeEditModal = () => {
@@ -213,6 +366,15 @@ export function CrewList({ onNavigate }: CrewListProps) {
     })
     setEditPhotoPathname(null)
     setEditPhotoPreviewUrl(null)
+    setEditWorkerCerts([])
+    setShowAddCertForm(false)
+    setNewCertForm({
+      certificationType: "",
+      issueDate: "",
+      expirationDate: "",
+      photoPathname: "",
+      photoPreviewUrl: "",
+    })
   }
 
   const toggleEditCertification = (cert: string) => {
@@ -333,7 +495,6 @@ export function CrewList({ onNavigate }: CrewListProps) {
                       alt={worker.name}
                       className="h-full w-full object-cover"
                       onError={(e) => {
-                        console.log("[v0] Image failed to load for worker:", worker.name, worker.photo_pathname)
                         // Hide the broken image and show fallback
                         const target = e.currentTarget
                         target.style.display = 'none'
@@ -391,15 +552,24 @@ export function CrewList({ onNavigate }: CrewListProps) {
               </div>
             )}
 
-            {/* Edit/Delete Actions */}
+            {/* View/Edit/Delete Actions */}
             <div className="flex gap-2 pt-2 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-border"
+                onClick={() => openViewModal(worker)}
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                View
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
                 className="flex-1 border-border"
                 onClick={() => openEditModal(worker)}
               >
-                <Pencil className="h-4 w-4 mr-2" />
+                <Pencil className="h-4 w-4 mr-1" />
                 Edit
               </Button>
               <Button
@@ -408,7 +578,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
                 className="flex-1 border-border text-destructive hover:bg-destructive/10"
                 onClick={() => setWorkerToDelete(worker)}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
+                <Trash2 className="h-4 w-4 mr-1" />
                 Delete
               </Button>
             </div>
@@ -606,11 +776,11 @@ export function CrewList({ onNavigate }: CrewListProps) {
                 </Select>
               </div>
 
-              {/* Certifications */}
+              {/* Quick Certifications Checkboxes */}
               <div className="flex flex-col gap-3">
                 <Label className="text-sm font-medium text-foreground flex items-center gap-2">
                   <Award className="h-4 w-4 text-muted-foreground" />
-                  Certifications
+                  Quick Certifications
                 </Label>
                 <div className="grid grid-cols-2 gap-2">
                   {certifications.map((cert) => (
@@ -629,6 +799,217 @@ export function CrewList({ onNavigate }: CrewListProps) {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Documented Certifications with Photos */}
+              <div className="flex flex-col gap-3 pt-3 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <FileCheck className="h-4 w-4 text-muted-foreground" />
+                    Documented Certifications
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddCertForm(true)}
+                    disabled={isSaving || showAddCertForm}
+                    className="border-border"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+
+                {/* Loading State */}
+                {isLoadingEditCerts && (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                {/* Existing Certifications List */}
+                {!isLoadingEditCerts && editWorkerCerts.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {editWorkerCerts.map((cert) => (
+                      <div key={cert.id} className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg">
+                        {cert.photo_pathname ? (
+                          <button
+                            type="button"
+                            onClick={() => setCertPhotoPreview(`/api/file?pathname=${encodeURIComponent(cert.photo_pathname!)}`)}
+                            className="h-12 w-12 rounded-lg overflow-hidden ring-1 ring-border hover:ring-primary/50 transition-all flex-shrink-0"
+                          >
+                            <img
+                              src={`/api/file?pathname=${encodeURIComponent(cert.photo_pathname)}`}
+                              alt={cert.certification_type}
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                        ) : (
+                          <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                            <FileCheck className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{cert.certification_type}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Expires: {new Date(cert.expiration_date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteCertification(cert.id)}
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!isLoadingEditCerts && editWorkerCerts.length === 0 && !showAddCertForm && (
+                  <p className="text-sm text-muted-foreground text-center py-2">No documented certifications</p>
+                )}
+
+                {/* Add Certification Form */}
+                {showAddCertForm && (
+                  <div className="flex flex-col gap-3 p-3 bg-secondary/30 rounded-lg">
+                    <div className="flex flex-col gap-2">
+                      <Label className="text-xs text-muted-foreground">Certification Type</Label>
+                      <Select 
+                        value={newCertForm.certificationType} 
+                        onValueChange={(v) => setNewCertForm(prev => ({ ...prev, certificationType: v }))}
+                        disabled={isSavingCert}
+                      >
+                        <SelectTrigger className="bg-input border-border text-foreground h-10">
+                          <SelectValue placeholder="Select certification" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border-border">
+                          {certifications.map((cert) => (
+                            <SelectItem key={cert} value={cert}>{cert}</SelectItem>
+                          ))}
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">Issue Date</Label>
+                        <Input
+                          type="date"
+                          value={newCertForm.issueDate}
+                          onChange={(e) => setNewCertForm(prev => ({ ...prev, issueDate: e.target.value }))}
+                          className="bg-input border-border text-foreground h-10"
+                          disabled={isSavingCert}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">Expiration Date</Label>
+                        <Input
+                          type="date"
+                          value={newCertForm.expirationDate}
+                          onChange={(e) => setNewCertForm(prev => ({ ...prev, expirationDate: e.target.value }))}
+                          className="bg-input border-border text-foreground h-10"
+                          disabled={isSavingCert}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Certificate Photo */}
+                    <div className="flex flex-col gap-2">
+                      <Label className="text-xs text-muted-foreground">Certificate Photo (Optional)</Label>
+                      <div className="flex items-center gap-3">
+                        {newCertForm.photoPreviewUrl ? (
+                          <div className="relative h-16 w-16 rounded-lg overflow-hidden ring-1 ring-border">
+                            <img
+                              src={newCertForm.photoPreviewUrl}
+                              alt="Certificate"
+                              className="h-full w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={removeCertPhoto}
+                              className="absolute top-0 right-0 p-1 bg-destructive text-destructive-foreground rounded-bl-lg"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCertPhotoSelect(true)}
+                              disabled={isSavingCert || isUploadingCertPhoto}
+                              className="border-border"
+                            >
+                              {isUploadingCertPhoto ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Camera className="h-4 w-4 mr-1" />
+                                  Camera
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCertPhotoSelect(false)}
+                              disabled={isSavingCert || isUploadingCertPhoto}
+                              className="border-border"
+                            >
+                              <Images className="h-4 w-4 mr-1" />
+                              Gallery
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowAddCertForm(false)
+                          setNewCertForm({
+                            certificationType: "",
+                            issueDate: "",
+                            expirationDate: "",
+                            photoPathname: "",
+                            photoPreviewUrl: "",
+                          })
+                        }}
+                        disabled={isSavingCert}
+                        className="flex-1 border-border"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleAddCertification}
+                        disabled={!newCertForm.certificationType || !newCertForm.expirationDate || isSavingCert}
+                        className="flex-1 bg-primary text-primary-foreground"
+                      >
+                        {isSavingCert ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Add Certification"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -689,6 +1070,169 @@ export function CrewList({ onNavigate }: CrewListProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* View Worker Modal (Read-Only) */}
+      {viewingWorker && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">Worker Profile</h2>
+              <Button variant="ghost" size="icon" onClick={closeViewModal}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="p-4 flex flex-col gap-4">
+              {/* Profile Header */}
+              <div className="flex flex-col items-center gap-3 pb-4 border-b border-border">
+                {viewingWorker.photo_pathname ? (
+                  <div className="h-24 w-24 rounded-full overflow-hidden ring-2 ring-primary/30">
+                    <img
+                      src={getPhotoUrl(viewingWorker.photo_pathname)!}
+                      alt={viewingWorker.name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center">
+                    <User className="h-10 w-10 text-primary" />
+                  </div>
+                )}
+                <div className="text-center">
+                  <h3 className="text-xl font-semibold text-foreground">{viewingWorker.name}</h3>
+                  <p className="text-sm text-muted-foreground">{viewingWorker.trade} • {viewingWorker.level || "Journeyman"}</p>
+                </div>
+                <Badge 
+                  variant="outline" 
+                  className={getStatusColor(viewingWorker.status)}
+                >
+                  {getStatusLabel(viewingWorker.status)}
+                </Badge>
+              </div>
+
+              {/* Contact Info */}
+              {viewingWorker.phone && (
+                <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg">
+                  <Phone className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="text-sm font-medium text-foreground">{viewingWorker.phone}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Certifications */}
+              {viewingWorker.certifications && viewingWorker.certifications.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Award className="h-4 w-4 text-muted-foreground" />
+                    Certifications
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {viewingWorker.certifications.map((cert) => (
+                      <Badge key={cert} variant="secondary" className="bg-secondary text-secondary-foreground">
+                        {cert}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Documented Certifications */}
+              <div className="flex flex-col gap-2">
+                <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 text-muted-foreground" />
+                  Documented Certifications
+                </Label>
+                
+                {isLoadingViewCerts ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : viewWorkerCerts.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {viewWorkerCerts.map((cert) => (
+                      <div key={cert.id} className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg">
+                        {cert.photo_pathname ? (
+                          <button
+                            type="button"
+                            onClick={() => setCertPhotoPreview(`/api/file?pathname=${encodeURIComponent(cert.photo_pathname!)}`)}
+                            className="h-12 w-12 rounded-lg overflow-hidden ring-1 ring-border hover:ring-primary/50 transition-all flex-shrink-0"
+                          >
+                            <img
+                              src={`/api/file?pathname=${encodeURIComponent(cert.photo_pathname)}`}
+                              alt={cert.certification_type}
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                        ) : (
+                          <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                            <FileCheck className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{cert.certification_type}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Expires: {new Date(cert.expiration_date).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-2">No documented certifications</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 border-t border-border">
+              <Button
+                variant="outline"
+                className="flex-1 border-border"
+                onClick={closeViewModal}
+              >
+                Close
+              </Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground"
+                onClick={() => {
+                  closeViewModal()
+                  openEditModal(viewingWorker)
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Worker
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cert Photo Preview Modal */}
+      {certPhotoPreview && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setCertPhotoPreview(null)}
+        >
+          <div className="relative max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setCertPhotoPreview(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <div className="bg-card rounded-xl overflow-hidden border border-border shadow-2xl">
+              <img
+                src={certPhotoPreview}
+                alt="Certificate"
+                className="w-full h-auto"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Photo Preview Modal */}
       {previewPhoto && (
