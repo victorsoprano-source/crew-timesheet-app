@@ -59,6 +59,9 @@ export function CrewList({ onNavigate }: CrewListProps) {
   })
   const [isSaving, setIsSaving] = useState(false)
   
+  // Photo preview state
+  const [previewPhoto, setPreviewPhoto] = useState<{ url: string; name: string } | null>(null)
+  
   // Delete confirmation state
   const [workerToDelete, setWorkerToDelete] = useState<Worker | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -108,6 +111,12 @@ export function CrewList({ onNavigate }: CrewListProps) {
       default:
         return status
     }
+  }
+
+  const getPhotoUrl = (pathname: string | null) => {
+    if (!pathname) return null
+    if (pathname.startsWith("http")) return pathname
+    return `https://xnfkvgjkjsjndpofwueb.supabase.co/storage/v1/object/public/${pathname}`
   }
 
   const handleStatusChange = (workerId: string, newStatus: Worker["status"]) => {
@@ -245,9 +254,23 @@ export function CrewList({ onNavigate }: CrewListProps) {
           <Card key={worker.id} className="p-4 bg-card border-border">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
+                {worker.photo_pathname ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPhoto({ url: getPhotoUrl(worker.photo_pathname)!, name: worker.name })}
+                    className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-primary/30 hover:ring-primary/60 transition-all cursor-pointer flex-shrink-0"
+                  >
+                    <img
+                      src={getPhotoUrl(worker.photo_pathname)!}
+                      alt={worker.name}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 flex-shrink-0">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                )}
                 <div>
                   <h3 className="font-medium text-foreground">{worker.name}</h3>
                   <p className="text-sm text-muted-foreground">{worker.trade} • {worker.level || "Journeyman"}</p>
@@ -510,6 +533,36 @@ export function CrewList({ onNavigate }: CrewListProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Photo Preview Modal */}
+      {previewPhoto && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setPreviewPhoto(null)}
+        >
+          <div className="relative max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewPhoto(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <div className="bg-card rounded-xl overflow-hidden border border-border shadow-2xl">
+              <div className="aspect-square relative">
+                <img
+                  src={previewPhoto.url}
+                  alt={previewPhoto.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="p-4 text-center">
+                <p className="font-medium text-foreground">{previewPhoto.name}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -10,6 +10,7 @@ export interface Worker {
   name: string
   trade: string
   phone: string | null
+  photo_pathname: string | null
   level: WorkerLevel
   status: "active" | "off-site" | "on-leave"
   certifications: string[]
