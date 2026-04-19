@@ -23,7 +23,7 @@ export default function CrewTimesheetApp() {
       case "crew-list":
         return "Crew List"
       case "reports":
-        return "Daily Reports"
+        return "Reports"
       case "certifications":
         return "Certifications"
       default:

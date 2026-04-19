@@ -56,6 +56,10 @@ export interface WeeklyTotalsReport {
     weeklyDT: number
     weeklyTotal: number
   }>
+  // Week status for UI display
+  isWeekComplete: boolean
+  lastDataDate: string // The last date with data (for week-to-date display)
+  daysWithData: number // Number of days with actual data
 }
 
 export interface DailyWorkerTotals {
@@ -106,6 +110,9 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
       workerCount: 0,
       dailyWorkerCounts: {},
       workerTotals: [],
+      isWeekComplete: false,
+      lastDataDate: weekStartStr,
+      daysWithData: 0,
     }
   }
 
@@ -207,6 +214,16 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
     dailyWorkerCountsResult[date] = workers.size
   }
 
+  // Calculate week status
+  const today = new Date()
+  const todayStr = today.toISOString().split("T")[0]
+  const isWeekComplete = todayStr > weekEndStr // Week is complete if today is after the week end (Tuesday)
+  
+  // Find the last date with actual data
+  const datesWithData = Object.keys(dailyWorkerCountsResult).sort()
+  const lastDataDate = datesWithData.length > 0 ? datesWithData[datesWithData.length - 1] : weekStartStr
+  const daysWithData = datesWithData.length
+
   return {
     weekStart: weekStartStr,
     weekEnd: weekEndStr,
@@ -217,6 +234,9 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
     workerCount: workerTotals.length,
     dailyWorkerCounts: dailyWorkerCountsResult,
     workerTotals,
+    isWeekComplete,
+    lastDataDate,
+    daysWithData,
   }
 }
 

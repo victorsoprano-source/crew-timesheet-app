@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2 } from "lucide-react"
+import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2, Calendar, CalendarDays } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ const getCurrentDayIndex = () => {
 }
 
 export function DailyReports() {
+  const [viewMode, setViewMode] = useState<"daily" | "weekly">("daily")
   const [weeklyReport, setWeeklyReport] = useState<WeeklyTotalsReport | null>(null)
   const [dailyTotals, setDailyTotals] = useState<DailyWorkerTotals | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -343,10 +344,30 @@ export function DailyReports() {
           <FileText className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Weekly Reports</h2>
+          <h2 className="text-lg font-semibold text-foreground">Reports</h2>
           <p className="text-sm text-muted-foreground">View timesheet totals</p>
         </div>
       </Card>
+
+      {/* View Mode Toggle */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant={viewMode === "daily" ? "default" : "outline"}
+          onClick={() => setViewMode("daily")}
+          className={viewMode === "daily" ? "bg-primary text-primary-foreground" : "border-border"}
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          Daily
+        </Button>
+        <Button
+          variant={viewMode === "weekly" ? "default" : "outline"}
+          onClick={() => setViewMode("weekly")}
+          className={viewMode === "weekly" ? "bg-primary text-primary-foreground" : "border-border"}
+        >
+          <CalendarDays className="h-4 w-4 mr-2" />
+          Weekly
+        </Button>
+      </div>
 
       {/* Week Navigation */}
       <Card className="flex items-center justify-between p-3 bg-card border-border">
@@ -362,15 +383,147 @@ export function DailyReports() {
         </Button>
       </Card>
 
-      {/* Debug Indicator - Showing selected day only */}
-      <div className="bg-primary/10 border border-primary/30 rounded-lg p-2 text-center">
-        <p className="text-sm font-medium text-primary">
-          Showing selected day only: {selectedDay?.dayName} {selectedDay?.dayNum}
-        </p>
-      </div>
+      {/* Weekly View */}
+      {viewMode === "weekly" && (
+        <>
+          {/* Week Status Indicator */}
+          <div className={`border rounded-lg p-3 text-center ${
+            weeklyReport?.isWeekComplete 
+              ? "bg-chart-3/10 border-chart-3/30" 
+              : "bg-primary/10 border-primary/30"
+          }`}>
+            <p className={`text-sm font-semibold ${
+              weeklyReport?.isWeekComplete ? "text-chart-3" : "text-primary"
+            }`}>
+              {weeklyReport?.isWeekComplete ? "Final Weekly Total" : "Week to Date"}
+            </p>
+            {!weeklyReport?.isWeekComplete && weeklyReport?.daysWithData !== undefined && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {weeklyReport.daysWithData} day{weeklyReport.daysWithData !== 1 ? "s" : ""} of data
+              </p>
+            )}
+          </div>
 
-      {/* Summary Stats - Daily ST, OT, DT breakdown */}
-      <div className="grid grid-cols-2 gap-3">
+          {/* Weekly Summary Stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                  <Clock className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalST || 0}</p>
+                  <p className="text-xs text-muted-foreground">Weekly ST</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-3/20">
+                  <Clock className="h-5 w-5 text-chart-3" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalOT || 0}</p>
+                  <p className="text-xs text-muted-foreground">Weekly OT</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/20">
+                  <Clock className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalDT || 0}</p>
+                  <p className="text-xs text-muted-foreground">Weekly DT</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20">
+                  <TrendingUp className="h-5 w-5 text-accent" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalHours || 0}</p>
+                  <p className="text-xs text-muted-foreground">Total Hours</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Weekly Worker Count */}
+          <Card className="p-4 bg-card border-border">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{weeklyReport?.workerCount || 0}</p>
+                <p className="text-xs text-muted-foreground">
+                  Workers This Week
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Weekly Worker Breakdown */}
+          {weeklyReport && weeklyReport.workerTotals.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-foreground px-1">
+                Worker Breakdown - {weeklyReport.isWeekComplete ? "Full Week" : "Week to Date"}
+              </h3>
+              {weeklyReport.workerTotals
+                .filter(worker => worker.weeklyTotal > 0)
+                .map((worker) => (
+                <Card key={worker.workerId} className="p-4 bg-card border-border">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p className="font-medium text-foreground">{worker.workerName}</p>
+                      <p className="text-sm text-muted-foreground">{worker.workerTrade}</p>
+                    </div>
+                    <span className="text-lg font-bold text-foreground">{worker.weeklyTotal} hrs</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-primary/10 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-primary">{worker.weeklyST}</p>
+                      <p className="text-xs text-muted-foreground">ST</p>
+                    </div>
+                    <div className="bg-chart-3/10 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-chart-3">{worker.weeklyOT}</p>
+                      <p className="text-xs text-muted-foreground">OT</p>
+                    </div>
+                    <div className="bg-destructive/10 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-destructive">{worker.weeklyDT}</p>
+                      <p className="text-xs text-muted-foreground">DT</p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Weekly Empty State */}
+          {(!weeklyReport || weeklyReport.workerTotals.filter(w => w.weeklyTotal > 0).length === 0) && !isLoading && (
+            <Card className="p-8 bg-card border-border text-center">
+              <p className="text-muted-foreground">No timesheet data for this week. Add entries in the Timesheet tab.</p>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Daily View */}
+      {viewMode === "daily" && (
+        <>
+          {/* Day Status Indicator */}
+          <div className="bg-primary/10 border border-primary/30 rounded-lg p-2 text-center">
+            <p className="text-sm font-medium text-primary">
+              Daily Report: {selectedDay?.dayName} {selectedDay?.dayNum}
+            </p>
+          </div>
+
+          {/* Summary Stats - Daily ST, OT, DT breakdown */}
+          <div className="grid grid-cols-2 gap-3">
         <Card className="p-4 bg-card border-border">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
@@ -783,13 +936,15 @@ export function DailyReports() {
         </div>
       )}
 
-      {/* Empty State */}
-      {(!dailyTotals || dailyTotals.workers.filter(w => w.status !== "Absent").length === 0) && !isLoading && (
-        <Card className="p-8 bg-card border-border text-center">
-          <p className="text-muted-foreground">
-            No timesheet entries for {selectedDay?.dayName || "this day"}. Add entries in the Timesheet tab.
-          </p>
-        </Card>
+      {/* Daily Empty State */}
+          {(!dailyTotals || dailyTotals.workers.filter(w => w.status !== "Absent").length === 0) && !isLoading && (
+            <Card className="p-8 bg-card border-border text-center">
+              <p className="text-muted-foreground">
+                No timesheet entries for {selectedDay?.dayName || "this day"}. Add entries in the Timesheet tab.
+              </p>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Refresh Button */}
