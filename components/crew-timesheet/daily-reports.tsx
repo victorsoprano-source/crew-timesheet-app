@@ -209,18 +209,26 @@ export function DailyReports() {
 
   // Load field report when day changes
   const loadFieldReport = async () => {
-    if (!weeklyReport || !selectedDay) return
+    if (!weeklyReport || !selectedDay) {
+      console.log("[v0] loadFieldReport skipped - weeklyReport:", !!weeklyReport, "selectedDay:", !!selectedDay)
+      return
+    }
+    
+    console.log("[v0] loadFieldReport called for:", { weekStart: weeklyReport.weekStart, workDate: selectedDay.date, dayName: selectedDay.dayName })
     
     const report = await getDailyFieldReport(weeklyReport.weekStart, selectedDay.date)
+    console.log("[v0] Loaded field report:", report)
     setFieldReport(report)
     
     if (report) {
+      console.log("[v0] Setting crew counts from report:", { journeyman: report.journeyman_count, apprentice: report.apprentice_count })
       setWorkPerformed(report.work_performed || "")
       setJourneymanCount(report.journeyman_count || 0)
       setApprenticeCount(report.apprentice_count || 0)
       setEquipment(report.equipment || [])
       setProblemsNotes(report.problems_notes || "")
     } else {
+      console.log("[v0] No report found, resetting form")
       // Reset form for new day
       setWorkPerformed("")
       setJourneymanCount(0)
@@ -231,22 +239,31 @@ export function DailyReports() {
   }
 
   const handleSaveFieldReport = async () => {
-    if (!weeklyReport || !selectedDay) return
+    if (!weeklyReport || !selectedDay) {
+      console.log("[v0] handleSaveFieldReport skipped - weeklyReport:", !!weeklyReport, "selectedDay:", !!selectedDay)
+      return
+    }
     
     setIsSavingReport(true)
     
+    const payload = {
+      weekStart: weeklyReport.weekStart,
+      workDate: selectedDay.date,
+      workPerformed,
+      journeymanCount,
+      apprenticeCount,
+      equipment,
+      problemsNotes,
+    }
+    
+    console.log("[v0] Saving field report for:", selectedDay.dayName, selectedDay.date)
+    console.log("[v0] Save payload:", payload)
+    
     try {
-      await saveDailyFieldReport({
-        weekStart: weeklyReport.weekStart,
-        workDate: selectedDay.date,
-        workPerformed,
-        journeymanCount,
-        apprenticeCount,
-        equipment,
-        problemsNotes,
-      })
+      const result = await saveDailyFieldReport(payload)
+      console.log("[v0] Save result:", result)
     } catch (err) {
-      console.error("Error saving field report:", err)
+      console.error("[v0] Error saving field report:", err)
     } finally {
       setIsSavingReport(false)
     }

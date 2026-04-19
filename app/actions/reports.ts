@@ -409,6 +409,8 @@ export async function deleteReportPhoto(photoId: string): Promise<{ success: boo
 export async function getDailyFieldReport(weekStart: string, workDate: string): Promise<DailyFieldReport | null> {
   const supabase = await createClient()
 
+  console.log("[v0] getDailyFieldReport called with:", { weekStart, workDate })
+
   const { data, error } = await supabase
     .from("daily_field_reports")
     .select("*")
@@ -419,11 +421,14 @@ export async function getDailyFieldReport(weekStart: string, workDate: string): 
   if (error) {
     if (error.code === "PGRST116") {
       // No rows found - this is normal for new days
+      console.log("[v0] No field report found for this day")
       return null
     }
-    console.error("Error fetching daily field report:", error)
+    console.error("[v0] Error fetching daily field report:", error)
     return null
   }
+
+  console.log("[v0] Found field report:", data)
 
   return {
     ...data,
@@ -442,28 +447,33 @@ export async function saveDailyFieldReport(data: {
 }): Promise<{ success: boolean; report?: DailyFieldReport; error?: string }> {
   const supabase = await createClient()
 
+  console.log("[v0] saveDailyFieldReport received:", data)
+
+  const upsertData = {
+    week_start: data.weekStart,
+    work_date: data.workDate,
+    work_performed: data.workPerformed || null,
+    journeyman_count: data.journeymanCount || 0,
+    apprentice_count: data.apprenticeCount || 0,
+    equipment: data.equipment || [],
+    problems_notes: data.problemsNotes || null,
+    updated_at: new Date().toISOString(),
+  }
+
+  console.log("[v0] Upserting to daily_field_reports:", upsertData)
+
   const { data: report, error } = await supabase
     .from("daily_field_reports")
-    .upsert(
-      {
-        week_start: data.weekStart,
-        work_date: data.workDate,
-        work_performed: data.workPerformed || null,
-        journeyman_count: data.journeymanCount || 0,
-        apprentice_count: data.apprenticeCount || 0,
-        equipment: data.equipment || [],
-        problems_notes: data.problemsNotes || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "week_start,work_date" }
-    )
+    .upsert(upsertData, { onConflict: "week_start,work_date" })
     .select()
     .single()
 
   if (error) {
-    console.error("Error saving daily field report:", error)
+    console.error("[v0] Error saving daily field report:", error)
     return { success: false, error: error.message }
   }
+
+  console.log("[v0] Saved report successfully:", report)
 
   revalidatePath("/")
   return { 
