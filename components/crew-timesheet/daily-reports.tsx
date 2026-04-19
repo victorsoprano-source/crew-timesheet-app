@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { getWeeklyTotalsFromTimesheets, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
+import { getWeeklyTotalsFromTimesheets, getDailyWorkerTotals, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type DailyWorkerTotals, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
 
 // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
 const getCurrentDayIndex = () => {
@@ -29,6 +29,7 @@ const getCurrentDayIndex = () => {
 
 export function DailyReports() {
   const [weeklyReport, setWeeklyReport] = useState<WeeklyTotalsReport | null>(null)
+  const [dailyTotals, setDailyTotals] = useState<DailyWorkerTotals | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0)
   const [selectedDayIndex, setSelectedDayIndex] = useState(getCurrentDayIndex) // Default to current day
@@ -69,9 +70,7 @@ export function DailyReports() {
 
   const weekDays = weeklyReport ? getWeekDays(new Date(weeklyReport.weekStart + "T00:00:00")) : []
   const selectedDay = weekDays[selectedDayIndex]
-  const workersToday = selectedDay && weeklyReport?.dailyWorkerCounts 
-    ? weeklyReport.dailyWorkerCounts[selectedDay.date] || 0 
-    : 0
+  const workersToday = dailyTotals?.workerCount || 0
 
   const getWeekStart = (offset: number) => {
     const today = new Date()
@@ -109,6 +108,22 @@ export function DailyReports() {
     }
     
     setIsLoading(false)
+  }
+
+  // Load daily totals when selected day changes
+  const loadDailyTotals = async () => {
+    if (!weeklyReport || !selectedDay) {
+      setDailyTotals(null)
+      return
+    }
+    
+    try {
+      const daily = await getDailyWorkerTotals(weeklyReport.weekStart, selectedDay.date)
+      setDailyTotals(daily)
+    } catch (err) {
+      console.error("Error loading daily totals:", err)
+      setDailyTotals(null)
+    }
   }
 
   const getPhotoUrl = (pathname: string) => {
@@ -278,9 +293,10 @@ export function DailyReports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
 
-  // Load field report when selected day changes
+  // Load field report and daily totals when selected day changes
   useEffect(() => {
     loadFieldReport()
+    loadDailyTotals()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDayIndex, weeklyReport?.weekStart])
 
@@ -326,7 +342,7 @@ export function DailyReports() {
         </Button>
       </Card>
 
-      {/* Summary Stats - ST, OT, DT breakdown */}
+      {/* Summary Stats - Daily ST, OT, DT breakdown */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="p-4 bg-card border-border">
           <div className="flex items-center gap-3">
@@ -334,8 +350,8 @@ export function DailyReports() {
               <Clock className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalST || 0}</p>
-              <p className="text-xs text-muted-foreground">Weekly ST</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalST || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily ST</p>
             </div>
           </div>
         </Card>
@@ -345,8 +361,8 @@ export function DailyReports() {
               <Clock className="h-5 w-5 text-chart-3" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalOT || 0}</p>
-              <p className="text-xs text-muted-foreground">Weekly OT</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalOT || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily OT</p>
             </div>
           </div>
         </Card>
@@ -356,8 +372,8 @@ export function DailyReports() {
               <Clock className="h-5 w-5 text-destructive" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalDT || 0}</p>
-              <p className="text-xs text-muted-foreground">Weekly DT</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalDT || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily DT</p>
             </div>
           </div>
         </Card>
@@ -367,8 +383,8 @@ export function DailyReports() {
               <TrendingUp className="h-5 w-5 text-accent" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalHours || 0}</p>
-              <p className="text-xs text-muted-foreground">Total Hours</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalHours || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily Hours</p>
             </div>
           </div>
         </Card>
@@ -704,30 +720,34 @@ export function DailyReports() {
         </div>
       </Card>
 
-      {/* Worker Breakdown */}
-      {weeklyReport && weeklyReport.workerTotals.length > 0 && (
+      {/* Worker Breakdown - Daily */}
+      {dailyTotals && dailyTotals.workers.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-foreground px-1">Worker Breakdown</h3>
-          {weeklyReport.workerTotals.map((worker) => (
+          <h3 className="text-sm font-semibold text-foreground px-1">
+            Worker Breakdown - {selectedDay?.dayName} {selectedDay?.dayNum}
+          </h3>
+          {dailyTotals.workers
+            .filter(worker => worker.status !== "Absent")
+            .map((worker) => (
             <Card key={worker.workerId} className="p-4 bg-card border-border">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="font-medium text-foreground">{worker.workerName}</p>
                   <p className="text-sm text-muted-foreground">{worker.workerTrade}</p>
                 </div>
-                <span className="text-lg font-bold text-foreground">{worker.weeklyTotal} hrs</span>
+                <span className="text-lg font-bold text-foreground">{worker.dailyTotal} hrs</span>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-primary/10 rounded-lg p-2">
-                  <p className="text-lg font-semibold text-primary">{worker.weeklyST}</p>
+                  <p className="text-lg font-semibold text-primary">{worker.dailyST}</p>
                   <p className="text-xs text-muted-foreground">ST</p>
                 </div>
                 <div className="bg-chart-3/10 rounded-lg p-2">
-                  <p className="text-lg font-semibold text-chart-3">{worker.weeklyOT}</p>
+                  <p className="text-lg font-semibold text-chart-3">{worker.dailyOT}</p>
                   <p className="text-xs text-muted-foreground">OT</p>
                 </div>
                 <div className="bg-destructive/10 rounded-lg p-2">
-                  <p className="text-lg font-semibold text-destructive">{worker.weeklyDT}</p>
+                  <p className="text-lg font-semibold text-destructive">{worker.dailyDT}</p>
                   <p className="text-xs text-muted-foreground">DT</p>
                 </div>
               </div>
@@ -737,9 +757,11 @@ export function DailyReports() {
       )}
 
       {/* Empty State */}
-      {(!weeklyReport || weeklyReport.workerTotals.length === 0) && (
+      {(!dailyTotals || dailyTotals.workers.filter(w => w.status !== "Absent").length === 0) && !isLoading && (
         <Card className="p-8 bg-card border-border text-center">
-          <p className="text-muted-foreground">No timesheet data for this week. Add entries in the Timesheet tab.</p>
+          <p className="text-muted-foreground">
+            No timesheet entries for {selectedDay?.dayName || "this day"}. Add entries in the Timesheet tab.
+          </p>
         </Card>
       )}
 

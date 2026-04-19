@@ -58,6 +58,25 @@ export interface WeeklyTotalsReport {
   }>
 }
 
+export interface DailyWorkerTotals {
+  date: string
+  totalST: number
+  totalOT: number
+  totalDT: number
+  totalHours: number
+  workerCount: number
+  workers: Array<{
+    workerId: string
+    workerName: string
+    workerTrade: string
+    dailyST: number
+    dailyOT: number
+    dailyDT: number
+    dailyTotal: number
+    status: string
+  }>
+}
+
 // Get weekly totals from real timesheet data
 export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promise<WeeklyTotalsReport | null> {
   const supabase = await createClient()
@@ -198,6 +217,100 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
     workerCount: workerTotals.length,
     dailyWorkerCounts: dailyWorkerCountsResult,
     workerTotals,
+  }
+}
+
+// Get daily totals for a specific date
+export async function getDailyWorkerTotals(weekStart: string, workDate: string): Promise<DailyWorkerTotals> {
+  const supabase = await createClient()
+
+  // Find the timesheet for this week
+  const { data: timesheet, error: timesheetError } = await supabase
+    .from("timesheets")
+    .select("id")
+    .eq("week_start", weekStart)
+    .single()
+
+  if (timesheetError || !timesheet) {
+    return {
+      date: workDate,
+      totalST: 0,
+      totalOT: 0,
+      totalDT: 0,
+      totalHours: 0,
+      workerCount: 0,
+      workers: [],
+    }
+  }
+
+  // Get entries for this specific day
+  const { data: entries, error: entriesError } = await supabase
+    .from("timesheet_entries")
+    .select(`
+      worker_id,
+      regular_hours,
+      overtime_hours,
+      double_time_hours,
+      attendance_status,
+      worker:workers(id, name, trade)
+    `)
+    .eq("timesheet_id", timesheet.id)
+    .eq("work_date", workDate)
+
+  if (entriesError || !entries) {
+    return {
+      date: workDate,
+      totalST: 0,
+      totalOT: 0,
+      totalDT: 0,
+      totalHours: 0,
+      workerCount: 0,
+      workers: [],
+    }
+  }
+
+  let totalST = 0
+  let totalOT = 0
+  let totalDT = 0
+  const workers: DailyWorkerTotals["workers"] = []
+
+  for (const entry of entries) {
+    const status = entry.attendance_status || "Present"
+    const isAbsent = status === "Absent"
+    
+    const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
+    const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
+    const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
+    const dailyTotal = st + ot + dt
+
+    totalST += st
+    totalOT += ot
+    totalDT += dt
+
+    const worker = entry.worker as { id: string; name: string; trade: string } | null
+    workers.push({
+      workerId: entry.worker_id,
+      workerName: worker?.name || "Unknown",
+      workerTrade: worker?.trade || "Unknown",
+      dailyST: st,
+      dailyOT: ot,
+      dailyDT: dt,
+      dailyTotal,
+      status,
+    })
+  }
+
+  // Filter to only workers who were present and had hours
+  const presentWorkers = workers.filter(w => w.status !== "Absent" && w.dailyTotal > 0)
+
+  return {
+    date: workDate,
+    totalST,
+    totalOT,
+    totalDT,
+    totalHours: totalST + totalOT + totalDT,
+    workerCount: presentWorkers.length,
+    workers,
   }
 }
 
