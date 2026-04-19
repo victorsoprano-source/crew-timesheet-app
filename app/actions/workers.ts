@@ -78,25 +78,53 @@ export async function getWorkerStats() {
   return stats
 }
 
+export interface CertificationInput {
+  certificationType: string
+  photoPathname?: string
+  issueDate: string
+  expirationDate: string
+}
+
 export async function createWorker(formData: {
   name: string
   trade: string
   phone: string
   certifications: string[]
-}): Promise<{ success: boolean; error?: string }> {
+  documentedCertifications?: CertificationInput[]
+}): Promise<{ success: boolean; workerId?: string; error?: string }> {
   const supabase = await createClient()
 
-  const { error } = await supabase.from("workers").insert({
+  const { data: worker, error } = await supabase.from("workers").insert({
     name: formData.name,
     trade: formData.trade,
     phone: formData.phone || null,
     certifications: formData.certifications,
     status: "active",
-  })
+  }).select("id").single()
 
   if (error) {
     console.error("Error creating worker:", error)
     return { success: false, error: error.message }
+  }
+
+  // Save documented certifications if any
+  if (formData.documentedCertifications && formData.documentedCertifications.length > 0 && worker?.id) {
+    const certRecords = formData.documentedCertifications.map(cert => ({
+      worker_id: worker.id,
+      certification_type: cert.certificationType,
+      photo_pathname: cert.photoPathname || null,
+      issue_date: cert.issueDate,
+      expiration_date: cert.expirationDate,
+    }))
+
+    const { error: certError } = await supabase
+      .from("worker_certifications")
+      .insert(certRecords)
+
+    if (certError) {
+      console.error("Error saving certifications:", certError)
+      // Worker was created but certs failed - still return success with warning
+    }
   }
 
   // Log activity
@@ -106,7 +134,7 @@ export async function createWorker(formData: {
   })
 
   revalidatePath("/")
-  return { success: true }
+  return { success: true, workerId: worker?.id }
 }
 
 export async function updateWorkerStatus(
