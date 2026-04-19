@@ -19,9 +19,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { getWorkers, getWorkerStats, updateWorkerStatus, updateWorker, deleteWorker, type Worker } from "@/app/actions/workers"
+import { getWorkers, getWorkerStats, updateWorkerStatus, updateWorker, deleteWorker, type Worker, type WorkerLevel } from "@/app/actions/workers"
 
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Heavy Equipment Operator", "HVAC Technician", "Painter"]
+
+const workerLevels: WorkerLevel[] = ["Journeyman", "Apprentice Year 1", "Apprentice Year 2", "Apprentice Year 3"]
 
 const certifications = [
   "OSHA 10",
@@ -51,6 +53,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
     name: "",
     trade: "",
     phone: "",
+    level: "Journeyman" as Worker["level"],
     certifications: [] as string[],
     status: "active" as Worker["status"],
   })
@@ -120,6 +123,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
       name: worker.name,
       trade: worker.trade,
       phone: worker.phone || "",
+      level: worker.level || "Journeyman",
       certifications: worker.certifications || [],
       status: worker.status,
     })
@@ -131,6 +135,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
       name: "",
       trade: "",
       phone: "",
+      level: "Journeyman",
       certifications: [],
       status: "active",
     })
@@ -245,7 +250,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
                 </div>
                 <div>
                   <h3 className="font-medium text-foreground">{worker.name}</h3>
-                  <p className="text-sm text-muted-foreground">{worker.trade}</p>
+                  <p className="text-sm text-muted-foreground">{worker.trade} • {worker.level || "Journeyman"}</p>
                 </div>
               </div>
               <Badge 
@@ -360,6 +365,28 @@ export function CrewList({ onNavigate }: CrewListProps) {
                   <SelectContent className="bg-popover border-border">
                     {trades.map((trade) => (
                       <SelectItem key={trade} value={trade}>{trade}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Level Field */}
+              <div className="flex flex-col gap-2">
+                <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <Award className="h-4 w-4 text-muted-foreground" />
+                  Classification
+                </Label>
+                <Select 
+                  value={editFormData.level} 
+                  onValueChange={(v) => setEditFormData({ ...editFormData, level: v as WorkerLevel })}
+                  disabled={isSaving}
+                >
+                  <SelectTrigger className="bg-input border-border text-foreground h-11">
+                    <SelectValue placeholder="Select level" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {workerLevels.map((level) => (
+                      <SelectItem key={level} value={level}>{level}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

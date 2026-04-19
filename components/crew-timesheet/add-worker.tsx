@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { UserPlus, User, Wrench, Phone, Award, Loader2, CheckCircle, Plus, Camera, Images, Trash2, Calendar, X, FileCheck } from "lucide-react"
-import { createWorker, type CertificationInput } from "@/app/actions/workers"
+import { createWorker, type CertificationInput, type WorkerLevel } from "@/app/actions/workers"
 
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Heavy Equipment Operator", "HVAC Technician", "Painter"]
+
+const workerLevels: WorkerLevel[] = ["Journeyman", "Apprentice Year 1", "Apprentice Year 2", "Apprentice Year 3"]
 
 const certificationTypes = [
   "OSHA 10",
@@ -43,6 +45,7 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
     name: "",
     trade: "",
     phone: "",
+    level: "Journeyman" as WorkerLevel,
   })
 
   // Certification state
@@ -148,7 +151,7 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
       
       if (result.success) {
         setSuccess(true)
-        setFormData({ name: "", trade: "", phone: "" })
+        setFormData({ name: "", trade: "", phone: "", level: "Journeyman" })
         setPendingCerts([])
         onSuccess?.()
         
@@ -222,6 +225,28 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
               <SelectContent className="bg-popover border-border">
                 {trades.map((trade) => (
                   <SelectItem key={trade} value={trade}>{trade}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Level Field */}
+          <div className="flex flex-col gap-2">
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Award className="h-4 w-4 text-muted-foreground" />
+              Classification
+            </Label>
+            <Select 
+              value={formData.level} 
+              onValueChange={(v) => setFormData({ ...formData, level: v as WorkerLevel })}
+              disabled={isPending}
+            >
+              <SelectTrigger className="bg-input border-border text-foreground h-11">
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                {workerLevels.map((level) => (
+                  <SelectItem key={level} value={level}>{level}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

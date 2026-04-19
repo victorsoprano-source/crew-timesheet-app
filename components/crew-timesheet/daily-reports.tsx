@@ -44,7 +44,9 @@ export function DailyReports() {
   const [fieldReport, setFieldReport] = useState<DailyFieldReport | null>(null)
   const [workPerformed, setWorkPerformed] = useState("")
   const [journeymanCount, setJourneymanCount] = useState(0)
-  const [apprenticeCount, setApprenticeCount] = useState(0)
+  const [apprenticeYear1Count, setApprenticeYear1Count] = useState(0)
+  const [apprenticeYear2Count, setApprenticeYear2Count] = useState(0)
+  const [apprenticeYear3Count, setApprenticeYear3Count] = useState(0)
   const [equipment, setEquipment] = useState<string[]>([])
   const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
@@ -209,40 +211,33 @@ export function DailyReports() {
 
   // Load field report when day changes
   const loadFieldReport = async () => {
-    if (!weeklyReport || !selectedDay) {
-      console.log("[v0] loadFieldReport skipped - weeklyReport:", !!weeklyReport, "selectedDay:", !!selectedDay)
-      return
-    }
-    
-    console.log("[v0] loadFieldReport called for:", { weekStart: weeklyReport.weekStart, workDate: selectedDay.date, dayName: selectedDay.dayName })
+    if (!weeklyReport || !selectedDay) return
     
     const report = await getDailyFieldReport(weeklyReport.weekStart, selectedDay.date)
-    console.log("[v0] Loaded field report:", report)
     setFieldReport(report)
     
     if (report) {
-      console.log("[v0] Setting crew counts from report:", { journeyman: report.journeyman_count, apprentice: report.apprentice_count })
       setWorkPerformed(report.work_performed || "")
       setJourneymanCount(report.journeyman_count || 0)
-      setApprenticeCount(report.apprentice_count || 0)
+      setApprenticeYear1Count(report.apprentice_year1_count || 0)
+      setApprenticeYear2Count(report.apprentice_year2_count || 0)
+      setApprenticeYear3Count(report.apprentice_year3_count || 0)
       setEquipment(report.equipment || [])
       setProblemsNotes(report.problems_notes || "")
     } else {
-      console.log("[v0] No report found, resetting form")
       // Reset form for new day
       setWorkPerformed("")
       setJourneymanCount(0)
-      setApprenticeCount(0)
+      setApprenticeYear1Count(0)
+      setApprenticeYear2Count(0)
+      setApprenticeYear3Count(0)
       setEquipment([])
       setProblemsNotes("")
     }
   }
 
   const handleSaveFieldReport = async () => {
-    if (!weeklyReport || !selectedDay) {
-      console.log("[v0] handleSaveFieldReport skipped - weeklyReport:", !!weeklyReport, "selectedDay:", !!selectedDay)
-      return
-    }
+    if (!weeklyReport || !selectedDay) return
     
     setIsSavingReport(true)
     
@@ -251,19 +246,17 @@ export function DailyReports() {
       workDate: selectedDay.date,
       workPerformed,
       journeymanCount,
-      apprenticeCount,
+      apprenticeYear1Count,
+      apprenticeYear2Count,
+      apprenticeYear3Count,
       equipment,
       problemsNotes,
     }
     
-    console.log("[v0] Saving field report for:", selectedDay.dayName, selectedDay.date)
-    console.log("[v0] Save payload:", payload)
-    
     try {
-      const result = await saveDailyFieldReport(payload)
-      console.log("[v0] Save result:", result)
+      await saveDailyFieldReport(payload)
     } catch (err) {
-      console.error("[v0] Error saving field report:", err)
+      console.error("Error saving field report:", err)
     } finally {
       setIsSavingReport(false)
     }
@@ -615,17 +608,43 @@ export function DailyReports() {
                 onChange={(e) => setJourneymanCount(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
                 onBlur={(e) => { if (e.target.value === "") setJourneymanCount(0) }}
                 className="bg-input border-border text-center"
+                placeholder="0"
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Apprentices</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Apprentice Yr 1</label>
               <Input
                 type="number"
                 min="0"
-                value={apprenticeCount || ""}
-                onChange={(e) => setApprenticeCount(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
-                onBlur={(e) => { if (e.target.value === "") setApprenticeCount(0) }}
+                value={apprenticeYear1Count || ""}
+                onChange={(e) => setApprenticeYear1Count(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
+                onBlur={(e) => { if (e.target.value === "") setApprenticeYear1Count(0) }}
                 className="bg-input border-border text-center"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Apprentice Yr 2</label>
+              <Input
+                type="number"
+                min="0"
+                value={apprenticeYear2Count || ""}
+                onChange={(e) => setApprenticeYear2Count(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
+                onBlur={(e) => { if (e.target.value === "") setApprenticeYear2Count(0) }}
+                className="bg-input border-border text-center"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Apprentice Yr 3</label>
+              <Input
+                type="number"
+                min="0"
+                value={apprenticeYear3Count || ""}
+                onChange={(e) => setApprenticeYear3Count(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
+                onBlur={(e) => { if (e.target.value === "") setApprenticeYear3Count(0) }}
+                className="bg-input border-border text-center"
+                placeholder="0"
               />
             </div>
           </div>

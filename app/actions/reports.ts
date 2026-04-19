@@ -28,7 +28,10 @@ export interface DailyFieldReport {
   work_date: string
   work_performed: string | null
   journeyman_count: number
-  apprentice_count: number
+  apprentice_count: number // Legacy field
+  apprentice_year1_count: number
+  apprentice_year2_count: number
+  apprentice_year3_count: number
   equipment: string[]
   problems_notes: string | null
   created_at: string
@@ -409,8 +412,6 @@ export async function deleteReportPhoto(photoId: string): Promise<{ success: boo
 export async function getDailyFieldReport(weekStart: string, workDate: string): Promise<DailyFieldReport | null> {
   const supabase = await createClient()
 
-  console.log("[v0] getDailyFieldReport called with:", { weekStart, workDate })
-
   const { data, error } = await supabase
     .from("daily_field_reports")
     .select("*")
@@ -421,14 +422,11 @@ export async function getDailyFieldReport(weekStart: string, workDate: string): 
   if (error) {
     if (error.code === "PGRST116") {
       // No rows found - this is normal for new days
-      console.log("[v0] No field report found for this day")
       return null
     }
-    console.error("[v0] Error fetching daily field report:", error)
+    console.error("Error fetching daily field report:", error)
     return null
   }
-
-  console.log("[v0] Found field report:", data)
 
   return {
     ...data,
@@ -441,26 +439,27 @@ export async function saveDailyFieldReport(data: {
   workDate: string
   workPerformed?: string
   journeymanCount?: number
-  apprenticeCount?: number
+  apprenticeYear1Count?: number
+  apprenticeYear2Count?: number
+  apprenticeYear3Count?: number
   equipment?: string[]
   problemsNotes?: string
 }): Promise<{ success: boolean; report?: DailyFieldReport; error?: string }> {
   const supabase = await createClient()
-
-  console.log("[v0] saveDailyFieldReport received:", data)
 
   const upsertData = {
     week_start: data.weekStart,
     work_date: data.workDate,
     work_performed: data.workPerformed || null,
     journeyman_count: data.journeymanCount || 0,
-    apprentice_count: data.apprenticeCount || 0,
+    apprentice_year1_count: data.apprenticeYear1Count || 0,
+    apprentice_year2_count: data.apprenticeYear2Count || 0,
+    apprentice_year3_count: data.apprenticeYear3Count || 0,
+    apprentice_count: (data.apprenticeYear1Count || 0) + (data.apprenticeYear2Count || 0) + (data.apprenticeYear3Count || 0), // Legacy field
     equipment: data.equipment || [],
     problems_notes: data.problemsNotes || null,
     updated_at: new Date().toISOString(),
   }
-
-  console.log("[v0] Upserting to daily_field_reports:", upsertData)
 
   const { data: report, error } = await supabase
     .from("daily_field_reports")
@@ -469,11 +468,9 @@ export async function saveDailyFieldReport(data: {
     .single()
 
   if (error) {
-    console.error("[v0] Error saving daily field report:", error)
+    console.error("Error saving daily field report:", error)
     return { success: false, error: error.message }
   }
-
-  console.log("[v0] Saved report successfully:", report)
 
   revalidatePath("/")
   return { 

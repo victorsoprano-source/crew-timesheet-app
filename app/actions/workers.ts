@@ -3,11 +3,14 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
+export type WorkerLevel = "Journeyman" | "Apprentice Year 1" | "Apprentice Year 2" | "Apprentice Year 3"
+
 export interface Worker {
   id: string
   name: string
   trade: string
   phone: string | null
+  level: WorkerLevel
   status: "active" | "off-site" | "on-leave"
   certifications: string[]
   created_at: string
@@ -89,6 +92,7 @@ export async function createWorker(formData: {
   name: string
   trade: string
   phone: string
+  level: WorkerLevel
   certifications: string[]
   documentedCertifications?: CertificationInput[]
 }): Promise<{ success: boolean; workerId?: string; error?: string }> {
@@ -98,6 +102,7 @@ export async function createWorker(formData: {
     name: formData.name,
     trade: formData.trade,
     phone: formData.phone || null,
+    level: formData.level,
     certifications: formData.certifications,
     status: "active",
   }).select("id").single()
@@ -163,6 +168,7 @@ export async function updateWorker(
     name: string
     trade: string
     phone: string
+    level: WorkerLevel
     certifications: string[]
     status: "active" | "off-site" | "on-leave"
   }
@@ -175,6 +181,7 @@ export async function updateWorker(
       name: formData.name,
       trade: formData.trade,
       phone: formData.phone || null,
+      level: formData.level,
       certifications: formData.certifications,
       status: formData.status,
       updated_at: new Date().toISOString(),
