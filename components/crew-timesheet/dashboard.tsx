@@ -79,7 +79,6 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
   const statCards = [
     { label: "Workers Today", value: stats.workersToday.toString(), icon: Users, color: "text-primary" },
     { label: "Total Hours", value: stats.hoursLogged.toString(), icon: Clock, color: "text-accent" },
-    { label: "ST / OT / DT", value: `${stats.totalST}/${stats.totalOT}/${stats.totalDT}`, icon: FileText, color: "text-chart-3" },
   ]
 
   const actions = [
@@ -134,6 +133,30 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
             )}
           </Card>
         ))}
+        
+        {/* ST/OT/DT Card - Custom 3-column layout */}
+        <Card className="flex flex-col items-center gap-2 p-4 bg-card border-border relative">
+          <FileText className="h-5 w-5 text-chart-3" />
+          <div className="grid grid-cols-3 gap-3 w-full text-center">
+            <div className="flex flex-col items-center">
+              <span className="text-lg font-bold text-foreground">{stats.totalST}</span>
+              <span className="text-[10px] text-muted-foreground">ST</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-lg font-bold text-foreground">{stats.totalOT}</span>
+              <span className="text-[10px] text-muted-foreground">OT</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-lg font-bold text-foreground">{stats.totalDT}</span>
+              <span className="text-[10px] text-muted-foreground">DT</span>
+            </div>
+          </div>
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-card/50 rounded-lg">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </Card>
       </div>
 
       {/* Daily Attendance Breakdown */}
