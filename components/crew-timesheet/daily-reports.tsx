@@ -338,34 +338,27 @@ export function DailyReports() {
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
-      {/* Header */}
-      <Card className="flex items-center gap-3 p-4 bg-card border-border">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
-          <FileText className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Reports</h2>
-          <p className="text-sm text-muted-foreground">View timesheet totals</p>
-        </div>
-      </Card>
-
       {/* View Mode Toggle */}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant={viewMode === "daily" ? "default" : "outline"}
           onClick={() => setViewMode("daily")}
-          className={viewMode === "daily" ? "bg-primary text-primary-foreground" : "border-border"}
+          className={viewMode === "daily" ? "bg-primary text-primary-foreground h-14" : "border-border h-14"}
         >
-          <Calendar className="h-4 w-4 mr-2" />
-          Daily
+          <div className="flex flex-col items-center gap-0.5">
+            <Calendar className="h-5 w-5" />
+            <span className="text-xs font-semibold">Daily Reports</span>
+          </div>
         </Button>
         <Button
           variant={viewMode === "weekly" ? "default" : "outline"}
           onClick={() => setViewMode("weekly")}
-          className={viewMode === "weekly" ? "bg-primary text-primary-foreground" : "border-border"}
+          className={viewMode === "weekly" ? "bg-primary text-primary-foreground h-14" : "border-border h-14"}
         >
-          <CalendarDays className="h-4 w-4 mr-2" />
-          Weekly
+          <div className="flex flex-col items-center gap-0.5">
+            <CalendarDays className="h-5 w-5" />
+            <span className="text-xs font-semibold">Weekly Reports</span>
+          </div>
         </Button>
       </div>
 
@@ -383,23 +376,36 @@ export function DailyReports() {
         </Button>
       </Card>
 
-      {/* Weekly View */}
+      {/* ==================== WEEKLY REPORTS ==================== */}
       {viewMode === "weekly" && (
         <>
-          {/* Week Status Indicator */}
+          {/* Weekly Reports Header */}
+          <Card className="flex items-center gap-3 p-4 bg-card border-border">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-chart-3/20">
+              <CalendarDays className="h-6 w-6 text-chart-3" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-foreground">Weekly Reports</h2>
+              <p className="text-sm text-muted-foreground">
+                {weeklyReport?.isWeekComplete ? "Final totals for the week" : "Week-to-date accumulated totals"}
+              </p>
+            </div>
+          </Card>
+
+          {/* Week Status Badge */}
           <div className={`border rounded-lg p-3 text-center ${
             weeklyReport?.isWeekComplete 
               ? "bg-chart-3/10 border-chart-3/30" 
-              : "bg-primary/10 border-primary/30"
+              : "bg-amber-500/10 border-amber-500/30"
           }`}>
             <p className={`text-sm font-semibold ${
-              weeklyReport?.isWeekComplete ? "text-chart-3" : "text-primary"
+              weeklyReport?.isWeekComplete ? "text-chart-3" : "text-amber-500"
             }`}>
-              {weeklyReport?.isWeekComplete ? "Final Weekly Total" : "Week to Date"}
+              {weeklyReport?.isWeekComplete ? "Week Complete - Final Totals" : "Week In Progress - To Date"}
             </p>
             {!weeklyReport?.isWeekComplete && weeklyReport?.daysWithData !== undefined && (
               <p className="text-xs text-muted-foreground mt-1">
-                {weeklyReport.daysWithData} day{weeklyReport.daysWithData !== 1 ? "s" : ""} of data
+                {weeklyReport.daysWithData} day{weeklyReport.daysWithData !== 1 ? "s" : ""} of data so far
               </p>
             )}
           </div>
@@ -467,12 +473,21 @@ export function DailyReports() {
             </div>
           </Card>
 
-          {/* Weekly Worker Breakdown */}
+          {/* Weekly Worker Breakdown (Accumulated) */}
           {weeklyReport && weeklyReport.workerTotals.length > 0 && (
             <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-foreground px-1">
-                Worker Breakdown - {weeklyReport.isWeekComplete ? "Full Week" : "Week to Date"}
-              </h3>
+              <div className="flex items-center gap-2 px-1">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Weekly Worker Hours
+                </h3>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  weeklyReport.isWeekComplete 
+                    ? "bg-chart-3/10 text-chart-3" 
+                    : "bg-amber-500/10 text-amber-500"
+                }`}>
+                  {weeklyReport.isWeekComplete ? "Final Totals" : "Accumulated"}
+                </span>
+              </div>
               {weeklyReport.workerTotals
                 .filter(worker => worker.weeklyTotal > 0)
                 .map((worker) => (
@@ -512,15 +527,21 @@ export function DailyReports() {
         </>
       )}
 
-      {/* Daily View */}
+      {/* ==================== DAILY REPORTS ==================== */}
       {viewMode === "daily" && (
         <>
-          {/* Day Status Indicator */}
-          <div className="bg-primary/10 border border-primary/30 rounded-lg p-2 text-center">
-            <p className="text-sm font-medium text-primary">
-              Daily Report: {selectedDay?.dayName} {selectedDay?.dayNum}
-            </p>
-          </div>
+          {/* Daily Reports Header */}
+          <Card className="flex items-center gap-3 p-4 bg-card border-border">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
+              <Calendar className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-foreground">Daily Reports</h2>
+              <p className="text-sm text-muted-foreground">
+                Showing {selectedDay?.dayName} {selectedDay?.dayNum} only
+              </p>
+            </div>
+          </Card>
 
           {/* Summary Stats - Daily ST, OT, DT breakdown */}
           <div className="grid grid-cols-2 gap-3">
@@ -900,12 +921,17 @@ export function DailyReports() {
         </div>
       </Card>
 
-      {/* Worker Breakdown - Daily */}
+      {/* Worker Breakdown - Daily (Selected Day Only) */}
       {dailyTotals && dailyTotals.workers.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-foreground px-1">
-            Worker Breakdown - {selectedDay?.dayName} {selectedDay?.dayNum}
-          </h3>
+          <div className="flex items-center gap-2 px-1">
+            <h3 className="text-sm font-semibold text-foreground">
+              Daily Worker Hours
+            </h3>
+            <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+              {selectedDay?.dayName} {selectedDay?.dayNum} only
+            </span>
+          </div>
           {dailyTotals.workers
             .filter(worker => worker.status !== "Absent")
             .map((worker) => (
