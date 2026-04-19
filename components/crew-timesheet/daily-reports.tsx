@@ -101,10 +101,19 @@ export function DailyReports() {
           notesMap[p.id] = p.caption || ""
         })
         setPhotoNotes(notesMap)
+        
+        // Load daily totals for the current selected day
+        const weekDaysNow = getWeekDays(new Date(report.weekStart + "T00:00:00"))
+        const selectedDayNow = weekDaysNow[selectedDayIndex]
+        if (selectedDayNow) {
+          const daily = await getDailyWorkerTotals(report.weekStart, selectedDayNow.date)
+          setDailyTotals(daily)
+        }
       }
     } catch (err) {
       console.error("Error loading report data:", err)
       setWeeklyReport(null)
+      setDailyTotals(null)
     }
     
     setIsLoading(false)
@@ -113,15 +122,26 @@ export function DailyReports() {
   // Load daily totals when selected day changes
   const loadDailyTotals = async () => {
     if (!weeklyReport || !selectedDay) {
+      console.log("[v0] loadDailyTotals: skipping - weeklyReport or selectedDay missing")
       setDailyTotals(null)
       return
     }
     
+    console.log("[v0] loadDailyTotals: fetching for", selectedDay.date)
+    
     try {
       const daily = await getDailyWorkerTotals(weeklyReport.weekStart, selectedDay.date)
+      console.log("[v0] loadDailyTotals: result", {
+        date: daily.date,
+        totalST: daily.totalST,
+        totalOT: daily.totalOT,
+        totalDT: daily.totalDT,
+        totalHours: daily.totalHours,
+        workerCount: daily.workers.length
+      })
       setDailyTotals(daily)
     } catch (err) {
-      console.error("Error loading daily totals:", err)
+      console.error("[v0] Error loading daily totals:", err)
       setDailyTotals(null)
     }
   }
@@ -341,6 +361,13 @@ export function DailyReports() {
           <ChevronRight className="h-5 w-5" />
         </Button>
       </Card>
+
+      {/* Debug Indicator - Showing selected day only */}
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-2 text-center">
+        <p className="text-sm font-medium text-primary">
+          Showing selected day only: {selectedDay?.dayName} {selectedDay?.dayNum}
+        </p>
+      </div>
 
       {/* Summary Stats - Daily ST, OT, DT breakdown */}
       <div className="grid grid-cols-2 gap-3">
