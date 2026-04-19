@@ -121,7 +121,10 @@ export function CrewList({ onNavigate }: CrewListProps) {
   const getPhotoUrl = (pathname: string | null) => {
     if (!pathname) return null
     if (pathname.startsWith("http")) return pathname
-    return `https://xnfkvgjkjsjndpofwueb.supabase.co/storage/v1/object/public/${pathname}`
+    // Use the /api/file endpoint to retrieve Vercel Blob stored files
+    const url = `/api/file?pathname=${encodeURIComponent(pathname)}`
+    console.log("[v0] getPhotoUrl for worker:", pathname, "->", url)
+    return url
   }
 
   const handleEditPhotoUpload = async (file: File) => {
@@ -329,7 +332,22 @@ export function CrewList({ onNavigate }: CrewListProps) {
                       src={getPhotoUrl(worker.photo_pathname)!}
                       alt={worker.name}
                       className="h-full w-full object-cover"
+                      onError={(e) => {
+                        console.log("[v0] Image failed to load for worker:", worker.name, worker.photo_pathname)
+                        // Hide the broken image and show fallback
+                        const target = e.currentTarget
+                        target.style.display = 'none'
+                        const fallback = target.nextElementSibling as HTMLElement
+                        if (fallback) fallback.style.display = 'flex'
+                      }}
                     />
+                    {/* Fallback icon - hidden by default, shown on image error */}
+                    <div 
+                      className="absolute inset-0 items-center justify-center bg-primary/20 hidden"
+                      style={{ display: 'none' }}
+                    >
+                      <User className="h-5 w-5 text-primary" />
+                    </div>
                   </button>
                 ) : (
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 flex-shrink-0">
