@@ -16,8 +16,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { getWeeklyTotalsFromTimesheets, getDailyWorkerTotals, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, getWeeklyPDFData, type WeeklyTotalsReport, type DailyWorkerTotals, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
-import { generateWeeklyTimesheetPDF } from "@/lib/pdf-export"
+import { getWeeklyTotalsFromTimesheets, getDailyWorkerTotals, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type DailyWorkerTotals, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
 
 // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
 const getCurrentDayIndex = () => {
@@ -56,7 +55,6 @@ export function DailyReports() {
   const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
-  const [isExportingPDF, setIsExportingPDF] = useState(false)
 
   const getWeekDays = (weekStart: Date) => {
     const days = []
@@ -461,34 +459,6 @@ export function DailyReports() {
                 {weeklyReport?.isWeekComplete ? "Final totals for the week" : "Week-to-date accumulated totals"}
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                setIsExportingPDF(true)
-                try {
-                  const pdfData = await getWeeklyPDFData(weekStart)
-                  if (pdfData) {
-                    generateWeeklyTimesheetPDF(pdfData)
-                  }
-                } catch (err) {
-                  console.error("PDF export error:", err)
-                } finally {
-                  setIsExportingPDF(false)
-                }
-              }}
-              disabled={isExportingPDF || !weeklyReport || weeklyReport.workerCount === 0}
-              className="border-border shrink-0"
-            >
-              {isExportingPDF ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Export PDF</span>
-                </>
-              )}
-            </Button>
           </Card>
 
           {/* Week Status Badge */}
