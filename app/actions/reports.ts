@@ -614,3 +614,187 @@ export async function saveDailyFieldReport(data: {
     }
   }
 }
+
+// Types for PDF export
+export interface WeeklyPDFWorkerData {
+  workerId: string
+  workerName: string
+  workerLevel: string // "Journeyman" | "Apprentice Year 1" | etc.
+  levelAbbr: string // "JM" | "APP1" | etc.
+  dailyHours: {
+    [date: string]: {
+      st: number
+      ot: number
+      dt: number
+    }
+  }
+  totalST: number
+  totalOT: number
+  totalDT: number
+  totalHours: number
+}
+
+export interface WeeklyPDFData {
+  weekStart: string
+  weekEnd: string
+  weekDates: string[] // Array of 7 dates in order (Wed, Thu, Fri, Sat, Sun, Mon, Tue)
+  workers: WeeklyPDFWorkerData[]
+  totalST: number
+  totalOT: number
+  totalDT: number
+  totalHours: number
+  notes: string | null
+}
+
+// Get level abbreviation
+function getLevelAbbreviation(level: string): string {
+  switch (level) {
+    case "Journeyman": return "JM"
+    case "Apprentice Year 1": return "APP1"
+    case "Apprentice Year 2": return "APP2"
+    case "Apprentice Year 3": return "APP3"
+    default: return "JM"
+  }
+}
+
+// Get detailed weekly data for PDF export
+export async function getWeeklyPDFData(weekStartDate: Date): Promise<WeeklyPDFData | null> {
+  const supabase = await createClient()
+  
+  const weekStartStr = weekStartDate.toISOString().split("T")[0]
+  const weekEnd = new Date(weekStartDate)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+  const weekEndStr = weekEnd.toISOString().split("T")[0]
+
+  // Generate array of 7 dates
+  const weekDates: string[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStartDate)
+    d.setDate(d.getDate() + i)
+    weekDates.push(d.toISOString().split("T")[0])
+  }
+
+  // Find the timesheet for this week
+  const { data: timesheet, error: timesheetError } = await supabase
+    .from("timesheets")
+    .select("id")
+    .eq("week_start", weekStartStr)
+    .single()
+
+  if (timesheetError || !timesheet) {
+    return {
+      weekStart: weekStartStr,
+      weekEnd: weekEndStr,
+      weekDates,
+      workers: [],
+      totalST: 0,
+      totalOT: 0,
+      totalDT: 0,
+      totalHours: 0,
+      notes: null,
+    }
+  }
+
+  // Get all entries for this timesheet with full worker info (including level)
+  const { data: entries, error: entriesError } = await supabase
+    .from("timesheet_entries")
+    .select(`
+      worker_id,
+      regular_hours,
+      overtime_hours,
+      double_time_hours,
+      work_date,
+      attendance_status,
+      worker:workers(id, name, trade, level)
+    `)
+    .eq("timesheet_id", timesheet.id)
+
+  if (entriesError) {
+    console.error("Error fetching entries for PDF:", entriesError)
+    return null
+  }
+
+  // Build worker data map
+  const workerMap = new Map<string, WeeklyPDFWorkerData>()
+
+  for (const entry of entries || []) {
+    const status = (entry as { attendance_status?: string }).attendance_status
+    const isAbsent = status === "Absent"
+    
+    const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
+    const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
+    const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
+    const workDate = (entry as { work_date?: string }).work_date || ""
+
+    const worker = entry.worker as { id: string; name: string; trade: string; level?: string } | null
+    const workerLevel = worker?.level || "Journeyman"
+
+    let workerData = workerMap.get(entry.worker_id)
+    if (!workerData) {
+      workerData = {
+        workerId: entry.worker_id,
+        workerName: worker?.name || "Unknown",
+        workerLevel,
+        levelAbbr: getLevelAbbreviation(workerLevel),
+        dailyHours: {},
+        totalST: 0,
+        totalOT: 0,
+        totalDT: 0,
+        totalHours: 0,
+      }
+      workerMap.set(entry.worker_id, workerData)
+    }
+
+    // Add daily hours
+    workerData.dailyHours[workDate] = { st, ot, dt }
+    workerData.totalST += st
+    workerData.totalOT += ot
+    workerData.totalDT += dt
+    workerData.totalHours += st + ot + dt
+  }
+
+  // Calculate totals
+  let totalST = 0
+  let totalOT = 0
+  let totalDT = 0
+
+  const workers = Array.from(workerMap.values())
+    .filter(w => w.totalHours > 0)
+    .sort((a, b) => a.workerName.localeCompare(b.workerName))
+
+  for (const w of workers) {
+    totalST += w.totalST
+    totalOT += w.totalOT
+    totalDT += w.totalDT
+  }
+
+  // Get field report notes for the week (combine all daily notes)
+  const { data: fieldReports } = await supabase
+    .from("daily_field_reports")
+    .select("work_date, problems_notes")
+    .eq("week_start", weekStartStr)
+    .not("problems_notes", "is", null)
+    .order("work_date", { ascending: true })
+
+  let notes: string | null = null
+  if (fieldReports && fieldReports.length > 0) {
+    const noteEntries = fieldReports
+      .filter(r => r.problems_notes && r.problems_notes.trim())
+      .map(r => `${new Date(r.work_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}: ${r.problems_notes}`)
+    if (noteEntries.length > 0) {
+      notes = noteEntries.join("\n")
+    }
+  }
+
+  return {
+    weekStart: weekStartStr,
+    weekEnd: weekEndStr,
+    weekDates,
+    workers,
+    totalST,
+    totalOT,
+    totalDT,
+    totalHours: totalST + totalOT + totalDT,
+    notes,
+  }
+}
