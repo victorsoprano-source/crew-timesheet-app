@@ -55,6 +55,7 @@ export function DailyReports() {
   const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
 
   const getWeekDays = (weekStart: Date) => {
     const days = []
@@ -459,6 +460,45 @@ export function DailyReports() {
                 {weeklyReport?.isWeekComplete ? "Final totals for the week" : "Week-to-date accumulated totals"}
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (isExportingPDF) return
+                setIsExportingPDF(true)
+                try {
+                  const weekStartStr = weekStart.toISOString().split("T")[0]
+                  const response = await fetch(`/api/export-pdf?weekStart=${weekStartStr}`)
+                  if (!response.ok) {
+                    throw new Error("PDF generation failed")
+                  }
+                  const blob = await response.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const a = document.createElement("a")
+                  a.href = url
+                  a.download = `Weekly_Timesheet_${weekStartStr}.pdf`
+                  document.body.appendChild(a)
+                  a.click()
+                  document.body.removeChild(a)
+                  window.URL.revokeObjectURL(url)
+                } catch (err) {
+                  alert("Error generating PDF")
+                } finally {
+                  setIsExportingPDF(false)
+                }
+              }}
+              disabled={isExportingPDF || !weeklyReport || weeklyReport.workerCount === 0}
+              className="border-border shrink-0"
+            >
+              {isExportingPDF ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Export PDF</span>
+                </>
+              )}
+            </Button>
           </Card>
 
           {/* Week Status Badge */}
