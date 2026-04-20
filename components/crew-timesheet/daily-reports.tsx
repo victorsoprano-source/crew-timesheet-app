@@ -464,10 +464,10 @@ export function DailyReports() {
               variant="outline"
               size="sm"
               onClick={async () => {
-                if (isExportingPDF) return
+                if (isExportingPDF || !weeklyReport) return
                 setIsExportingPDF(true)
                 try {
-                  const weekStartStr = weekStart.toISOString().split("T")[0]
+                  const weekStartStr = weeklyReport.weekStart
                   console.log("[v0] Requesting PDF for week:", weekStartStr)
                   const response = await fetch(`/api/export-pdf?weekStart=${weekStartStr}`)
                   
