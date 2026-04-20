@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2, Calendar, CalendarDays } from "lucide-react"
+import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2, Calendar, CalendarDays, CheckCircle, XCircle } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,11 +36,13 @@ export function DailyReports() {
   const [selectedDayIndex, setSelectedDayIndex] = useState(getCurrentDayIndex) // Default to current day
   const [photos, setPhotos] = useState<ReportPhoto[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<{ id: string; name: string; status: "pending" | "uploading" | "success" | "error"; error?: string }[]>([])
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [photoNotes, setPhotoNotes] = useState<Record<string, string>>({})
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
   
   // Field Report state
   const [fieldReport, setFieldReport] = useState<DailyFieldReport | null>(null)
@@ -151,10 +153,11 @@ export function DailyReports() {
     return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
-  const handlePhotoUpload = async (file: File) => {
-    if (!weeklyReport || !selectedDay) return
-    
-    setIsUploading(true)
+  // Upload a single file and return result
+  const uploadSingleFile = async (file: File, queueId: string): Promise<{ success: boolean; photo?: ReportPhoto; error?: string }> => {
+    if (!weeklyReport || !selectedDay) {
+      return { success: false, error: "No week or day selected" }
+    }
     
     try {
       const formData = new FormData()
@@ -168,30 +171,99 @@ export function DailyReports() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Upload failed')
+        return { success: false, error: result.error || 'Upload failed' }
       }
 
       // Save to database
-      const { success, photo } = await addReportPhoto({
+      const { success, photo, error } = await addReportPhoto({
         weekStart: weeklyReport.weekStart,
         workDate: selectedDay.date,
         photoPathname: result.pathname,
       })
 
       if (success && photo) {
-        setPhotos([photo, ...photos])
-        // Initialize empty note for new photo
-        setPhotoNotes(prev => ({ ...prev, [photo.id]: "" }))
+        return { success: true, photo }
+      } else {
+        return { success: false, error: error || "Failed to save photo" }
       }
     } catch (err) {
-      console.error("Upload error:", err)
-    } finally {
-      setIsUploading(false)
+      return { success: false, error: err instanceof Error ? err.message : "Upload failed" }
     }
+  }
+
+  // Handle multiple file uploads with progress tracking
+  const handleMultiplePhotoUpload = async (files: File[]) => {
+    if (!weeklyReport || !selectedDay || files.length === 0) return
+    
+    setIsUploading(true)
+    setUploadSuccess(null)
+    
+    // Create queue entries for all files
+    const queueEntries = files.map((file, index) => ({
+      id: `upload-${Date.now()}-${index}`,
+      name: file.name,
+      status: "pending" as const,
+    }))
+    
+    setUploadQueue(queueEntries)
+    
+    let successCount = 0
+    let errorCount = 0
+    const newPhotos: ReportPhoto[] = []
+    
+    // Process uploads one at a time to avoid overwhelming the server
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const queueId = queueEntries[i].id
+      
+      // Update status to uploading
+      setUploadQueue(prev => prev.map(item => 
+        item.id === queueId ? { ...item, status: "uploading" as const } : item
+      ))
+      
+      const result = await uploadSingleFile(file, queueId)
+      
+      if (result.success && result.photo) {
+        successCount++
+        newPhotos.push(result.photo)
+        setUploadQueue(prev => prev.map(item => 
+          item.id === queueId ? { ...item, status: "success" as const } : item
+        ))
+      } else {
+        errorCount++
+        setUploadQueue(prev => prev.map(item => 
+          item.id === queueId ? { ...item, status: "error" as const, error: result.error } : item
+        ))
+      }
+    }
+    
+    // Add all successful photos to state at once
+    if (newPhotos.length > 0) {
+      setPhotos(prev => [...newPhotos, ...prev])
+      // Initialize empty notes for new photos
+      const newNotes: Record<string, string> = {}
+      newPhotos.forEach(p => { newNotes[p.id] = "" })
+      setPhotoNotes(prev => ({ ...prev, ...newNotes }))
+    }
+    
+    // Show success message
+    if (successCount > 0) {
+      setUploadSuccess(`${successCount} photo${successCount > 1 ? 's' : ''} uploaded successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`)
+      // Clear success message after 3 seconds
+      setTimeout(() => setUploadSuccess(null), 3000)
+    }
+    
+    // Clear queue after a short delay to show final status
+    setTimeout(() => {
+      setUploadQueue([])
+      setIsUploading(false)
+    }, errorCount > 0 ? 5000 : 1500) // Keep longer if there were errors
   }
 
   // Mobile-friendly file select - allows camera or gallery
   const handleFileSelect = (useCamera: boolean = false) => {
+    if (isUploading) return // Prevent double-tap while uploading
+    
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
@@ -205,10 +277,7 @@ export function DailyReports() {
     input.onchange = async (e) => {
       const files = (e.target as HTMLInputElement).files
       if (files && files.length > 0) {
-        // Upload all selected files
-        for (const file of Array.from(files)) {
-          await handlePhotoUpload(file)
-        }
+        await handleMultiplePhotoUpload(Array.from(files))
       }
     }
     input.click()
@@ -647,41 +716,74 @@ export function DailyReports() {
               className="border-border"
               title="Take photo with camera"
             >
-              {isUploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Camera className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Camera</span>
-                </>
-              )}
+              <Camera className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Camera</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleFileSelect(false)}
               disabled={isUploading}
-              className="border-border"
-              title="Choose from gallery"
+              className="border-border relative"
+              title="Choose multiple photos from gallery"
             >
-              {isUploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Images className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Gallery</span>
-                </>
-              )}
+              <Images className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Gallery</span>
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] px-1 rounded-full">
+                +
+              </span>
             </Button>
           </div>
         </div>
 
-        {dayPhotos.length === 0 ? (
+        {/* Upload Progress Queue */}
+        {uploadQueue.length > 0 && (
+          <div className="mb-4 p-3 bg-secondary/30 rounded-lg border border-border">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Uploading {uploadQueue.filter(u => u.status === "success").length}/{uploadQueue.length} photos...
+            </p>
+            <div className="flex flex-col gap-2">
+              {uploadQueue.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 text-sm">
+                  {item.status === "pending" && (
+                    <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />
+                  )}
+                  {item.status === "uploading" && (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  )}
+                  {item.status === "success" && (
+                    <CheckCircle className="h-4 w-4 text-chart-3" />
+                  )}
+                  {item.status === "error" && (
+                    <XCircle className="h-4 w-4 text-destructive" />
+                  )}
+                  <span className={`truncate flex-1 ${item.status === "error" ? "text-destructive" : "text-foreground"}`}>
+                    {item.name.length > 25 ? `${item.name.slice(0, 25)}...` : item.name}
+                  </span>
+                  {item.status === "error" && item.error && (
+                    <span className="text-xs text-destructive">{item.error}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {uploadSuccess && (
+          <div className="mb-4 p-3 bg-chart-3/10 border border-chart-3/30 rounded-lg flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-chart-3 flex-shrink-0" />
+            <p className="text-sm font-medium text-chart-3">{uploadSuccess}</p>
+          </div>
+        )}
+
+        {dayPhotos.length === 0 && !isUploading ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
               <ImageIcon className="h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm text-muted-foreground">No photos for this day</p>
+            <p className="text-xs text-muted-foreground mt-1">Select multiple photos from gallery at once</p>
             <div className="flex gap-2 mt-3">
               <Button
                 variant="outline"
@@ -693,17 +795,17 @@ export function DailyReports() {
                 Take Photo
               </Button>
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
                 onClick={() => handleFileSelect(false)}
                 disabled={isUploading}
               >
                 <Images className="h-4 w-4 mr-2" />
-                Gallery
+                Add Photos
               </Button>
             </div>
           </div>
-        ) : (
+        ) : dayPhotos.length > 0 ? (
           <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
             {dayPhotos.map((photo, index) => (
               <div key={photo.id} className="bg-secondary/30 rounded-lg p-3 border border-border">
@@ -769,7 +871,7 @@ export function DailyReports() {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </Card>
 
       {/* Daily Field Report */}
