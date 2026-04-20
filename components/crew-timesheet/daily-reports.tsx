@@ -466,13 +466,20 @@ export function DailyReports() {
               onClick={async () => {
                 if (isExportingPDF || !weeklyReport) return
                 setIsExportingPDF(true)
+                
+                const weekStartStr = weeklyReport.weekStart
+                
+                // Create abort controller for timeout
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), 30000)
+                
                 try {
-                  const weekStartStr = weeklyReport.weekStart
-                  console.log("[v0] Requesting PDF for week:", weekStartStr)
-                  const response = await fetch(`/api/export-pdf?weekStart=${weekStartStr}`)
+                  const response = await fetch(`/api/export-pdf?weekStart=${weekStartStr}`, {
+                    signal: controller.signal
+                  })
+                  clearTimeout(timeoutId)
                   
                   if (!response.ok) {
-                    // Try to get error message from response
                     let errorMsg = "PDF generation failed"
                     try {
                       const errorData = await response.json()
@@ -480,13 +487,17 @@ export function DailyReports() {
                     } catch {
                       // Response wasn't JSON
                     }
-                    console.error("[v0] PDF error:", errorMsg)
                     alert(errorMsg)
                     return
                   }
                   
                   const blob = await response.blob()
-                  console.log("[v0] PDF received, size:", blob.size)
+                  
+                  if (blob.size === 0) {
+                    alert("Error: Empty PDF received")
+                    return
+                  }
+                  
                   const url = window.URL.createObjectURL(blob)
                   const a = document.createElement("a")
                   a.href = url
@@ -495,10 +506,13 @@ export function DailyReports() {
                   a.click()
                   document.body.removeChild(a)
                   window.URL.revokeObjectURL(url)
-                  console.log("[v0] PDF download triggered")
                 } catch (err) {
-                  console.error("[v0] PDF fetch error:", err)
-                  alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+                  clearTimeout(timeoutId)
+                  if (err instanceof Error && err.name === "AbortError") {
+                    alert("Export timed out. Please try again.")
+                  } else {
+                    alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+                  }
                 } finally {
                   setIsExportingPDF(false)
                 }
