@@ -468,11 +468,25 @@ export function DailyReports() {
                 setIsExportingPDF(true)
                 try {
                   const weekStartStr = weekStart.toISOString().split("T")[0]
+                  console.log("[v0] Requesting PDF for week:", weekStartStr)
                   const response = await fetch(`/api/export-pdf?weekStart=${weekStartStr}`)
+                  
                   if (!response.ok) {
-                    throw new Error("PDF generation failed")
+                    // Try to get error message from response
+                    let errorMsg = "PDF generation failed"
+                    try {
+                      const errorData = await response.json()
+                      errorMsg = errorData.error || errorMsg
+                    } catch {
+                      // Response wasn't JSON
+                    }
+                    console.error("[v0] PDF error:", errorMsg)
+                    alert(errorMsg)
+                    return
                   }
+                  
                   const blob = await response.blob()
+                  console.log("[v0] PDF received, size:", blob.size)
                   const url = window.URL.createObjectURL(blob)
                   const a = document.createElement("a")
                   a.href = url
@@ -481,8 +495,10 @@ export function DailyReports() {
                   a.click()
                   document.body.removeChild(a)
                   window.URL.revokeObjectURL(url)
+                  console.log("[v0] PDF download triggered")
                 } catch (err) {
-                  alert("Error generating PDF")
+                  console.error("[v0] PDF fetch error:", err)
+                  alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
                 } finally {
                   setIsExportingPDF(false)
                 }
