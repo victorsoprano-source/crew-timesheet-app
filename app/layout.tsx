@@ -35,8 +35,21 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark bg-background">
-      <body className="font-sans antialiased min-h-screen">
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        {/* Critical inline styles to prevent flash of unstyled content */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          html, body {
+            background-color: #1a1b2e !important;
+            color: #fafafa !important;
+          }
+          html.dark, html.dark body {
+            background-color: #1a1b2e !important;
+            color: #fafafa !important;
+          }
+        `}} />
+      </head>
+      <body className="font-sans antialiased min-h-screen bg-background text-foreground">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

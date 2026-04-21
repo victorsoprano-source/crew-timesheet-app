@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dashboard } from "@/components/crew-timesheet/dashboard"
 import { Timesheet } from "@/components/crew-timesheet/timesheet"
 import { AddWorker } from "@/components/crew-timesheet/add-worker"
@@ -9,10 +9,16 @@ import { DailyReports } from "@/components/crew-timesheet/daily-reports"
 import { Certifications } from "@/components/crew-timesheet/certifications"
 import { BottomNav } from "@/components/crew-timesheet/bottom-nav"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 
 export default function CrewTimesheetApp() {
+  const [mounted, setMounted] = useState(false)
   const [currentScreen, setCurrentScreen] = useState("dashboard")
+
+  // Wait for client-side hydration to complete
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const getScreenTitle = (screen: string) => {
     switch (screen) {
@@ -46,6 +52,21 @@ export default function CrewTimesheetApp() {
       default:
         return <Dashboard supervisorName="John Martinez" onNavigate={setCurrentScreen} />
     }
+  }
+
+  // Show loading screen until client is mounted to prevent FOUC
+  if (!mounted) {
+    return (
+      <div 
+        className="min-h-screen max-w-md mx-auto flex flex-col items-center justify-center"
+        style={{ backgroundColor: '#1a1b2e' }}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#5b8def' }} />
+          <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
