@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { AutocompleteInput } from "@/components/ui/autocomplete-input"
+import { useInputMemory } from "@/hooks/use-input-memory"
 import { getWeeklyTotalsFromTimesheets, getDailyWorkerTotals, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type DailyWorkerTotals, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
 
 // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
@@ -56,6 +58,9 @@ export function DailyReports() {
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [isExportingPDF, setIsExportingPDF] = useState(false)
+
+  // Autocomplete memory for equipment
+  const equipmentMemory = useInputMemory({ fieldType: "equipment" })
 
   const getWeekDays = (weekStart: Date) => {
     const days = []
@@ -370,7 +375,9 @@ export function DailyReports() {
 
   const addEquipmentItem = () => {
     if (newEquipment.trim()) {
-      setEquipment([...equipment, newEquipment.trim()])
+      const trimmedValue = newEquipment.trim()
+      setEquipment([...equipment, trimmedValue])
+      equipmentMemory.saveValue(trimmedValue) // Save to autocomplete memory
       setNewEquipment("")
     }
   }
@@ -1046,11 +1053,12 @@ export function DailyReports() {
             Equipment Used
           </label>
           <div className="flex gap-2 mb-2">
-            <Input
+            <AutocompleteInput
+              fieldType="equipment"
               placeholder="Add equipment..."
               value={newEquipment}
-              onChange={(e) => setNewEquipment(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addEquipmentItem())}
+              onChange={(value) => setNewEquipment(value)}
+              autoSaveOnBlur={false}
               className="bg-input border-border"
             />
             <Button variant="outline" size="sm" onClick={addEquipmentItem} className="shrink-0">
