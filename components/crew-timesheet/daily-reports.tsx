@@ -57,6 +57,7 @@ export function DailyReports() {
   const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [isExportingPDF, setIsExportingPDF] = useState(false)
 
   // Autocomplete memory for equipment
@@ -351,6 +352,7 @@ export function DailyReports() {
     if (!weeklyReport || !selectedDay) return
     
     setIsSavingReport(true)
+    setSaveStatus("saving")
     
     const payload = {
       weekStart: weeklyReport.weekStart,
@@ -366,8 +368,14 @@ export function DailyReports() {
     
     try {
       await saveDailyFieldReport(payload)
+      setSaveStatus("saved")
+      // Reset to idle after 2 seconds
+      setTimeout(() => setSaveStatus("idle"), 2000)
     } catch (err) {
       console.error("Error saving field report:", err)
+      setSaveStatus("error")
+      // Reset to idle after 3 seconds
+      setTimeout(() => setSaveStatus("idle"), 3000)
     } finally {
       setIsSavingReport(false)
     }
@@ -1150,6 +1158,41 @@ export function DailyReports() {
               </p>
             </Card>
           )}
+
+          {/* Save Changes Button */}
+          <Button 
+            className={`h-14 font-semibold text-base ${
+              saveStatus === "saved" 
+                ? "bg-chart-3 hover:bg-chart-3/90 text-primary-foreground" 
+                : saveStatus === "error"
+                ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+            }`}
+            onClick={handleSaveFieldReport}
+            disabled={isSavingReport}
+          >
+            {saveStatus === "saving" ? (
+              <>
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : saveStatus === "saved" ? (
+              <>
+                <Save className="h-5 w-5 mr-2" />
+                Saved!
+              </>
+            ) : saveStatus === "error" ? (
+              <>
+                <AlertTriangle className="h-5 w-5 mr-2" />
+                Error Saving
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
         </>
       )}
 
