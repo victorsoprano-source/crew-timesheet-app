@@ -59,6 +59,7 @@ export function DailyReports() {
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [isExportingPDF, setIsExportingPDF] = useState(false)
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
 
   // Autocomplete memory for equipment
   const equipmentMemory = useInputMemory({ fieldType: "equipment" })
@@ -481,8 +482,10 @@ export function DailyReports() {
               onClick={async () => {
                 if (isExportingPDF || !weeklyReport) return
                 setIsExportingPDF(true)
+                setPdfBlobUrl(null) // Clear any previous URL
                 
                 const weekStartStr = weeklyReport.weekStart
+                console.log("[v0] Starting PDF export for week:", weekStartStr)
                 
                 // Create abort controller for timeout
                 const controller = new AbortController()
@@ -494,6 +497,11 @@ export function DailyReports() {
                   })
                   clearTimeout(timeoutId)
                   
+                  // Log response details
+                  console.log("[v0] Response status:", response.status)
+                  console.log("[v0] Content-Type:", response.headers.get("content-type"))
+                  console.log("[v0] Content-Disposition:", response.headers.get("content-disposition"))
+                  
                   if (!response.ok) {
                     let errorMsg = "PDF generation failed"
                     try {
@@ -502,34 +510,63 @@ export function DailyReports() {
                     } catch {
                       // Response wasn't JSON
                     }
+                    console.error("[v0] PDF error:", errorMsg)
                     alert(errorMsg)
                     return
                   }
                   
+                  const contentType = response.headers.get("content-type")
+                  if (!contentType?.includes("application/pdf")) {
+                    console.error("[v0] Invalid content type:", contentType)
+                    alert("Error: Server did not return a PDF")
+                    return
+                  }
+                  
                   const blob = await response.blob()
+                  console.log("[v0] Blob received - size:", blob.size, "type:", blob.type)
                   
                   if (blob.size === 0) {
+                    console.error("[v0] Empty blob received")
                     alert("Error: Empty PDF received")
                     return
                   }
                   
+                  // Create blob URL
                   const url = window.URL.createObjectURL(blob)
-                  const a = document.createElement("a")
-                  a.href = url
-                  a.download = `Weekly_Timesheet_${weekStartStr}.pdf`
-                  document.body.appendChild(a)
-                  a.click()
-                  document.body.removeChild(a)
-                  window.URL.revokeObjectURL(url)
+                  console.log("[v0] Blob URL created:", url)
+                  
+                  // Store URL for fallback buttons
+                  setPdfBlobUrl(url)
+                  
+                  // Attempt automatic download
+                  try {
+                    const a = document.createElement("a")
+                    a.href = url
+                    a.download = `Weekly_Timesheet_${weekStartStr}.pdf`
+                    a.style.display = "none"
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    console.log("[v0] Download triggered via anchor click")
+                  } catch (downloadErr) {
+                    console.error("[v0] Anchor download failed:", downloadErr)
+                  }
+                  
+                  // Don't revoke URL immediately - keep it for fallback buttons
+                  // URL will be revoked when component unmounts or new export starts
+                  
                 } catch (err) {
                   clearTimeout(timeoutId)
                   if (err instanceof Error && err.name === "AbortError") {
+                    console.error("[v0] Export timed out")
                     alert("Export timed out. Please try again.")
                   } else {
+                    console.error("[v0] Fetch error:", err)
                     alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
                   }
                 } finally {
                   setIsExportingPDF(false)
+                  console.log("[v0] Export flow completed")
                 }
               }}
               disabled={isExportingPDF || !weeklyReport || weeklyReport.workerCount === 0}
@@ -545,6 +582,50 @@ export function DailyReports() {
               )}
             </Button>
           </Card>
+
+          {/* PDF Download Fallback - shown when blob URL exists */}
+          {pdfBlobUrl && (
+            <Card className="p-3 bg-chart-3/10 border-chart-3/30">
+              <p className="text-sm text-chart-3 font-medium mb-2">PDF Ready!</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    window.open(pdfBlobUrl, "_blank")
+                  }}
+                  className="border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+                >
+                  Open in New Tab
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const a = document.createElement("a")
+                    a.href = pdfBlobUrl
+                    a.download = `Weekly_Timesheet_${weeklyReport?.weekStart || "export"}.pdf`
+                    a.click()
+                  }}
+                  className="border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download Again
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    window.URL.revokeObjectURL(pdfBlobUrl)
+                    setPdfBlobUrl(null)
+                  }}
+                  className="text-muted-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Week Status Badge */}
           <div className={`border rounded-lg p-3 text-center ${
