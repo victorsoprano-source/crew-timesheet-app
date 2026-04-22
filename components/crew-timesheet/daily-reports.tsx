@@ -58,8 +58,9 @@ export function DailyReports() {
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
-  const [isExportingPDF, setIsExportingPDF] = useState(false)
+  const [exportingType, setExportingType] = useState<"master" | "summary" | null>(null)
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
+  const [pdfType, setPdfType] = useState<"master" | "summary" | null>(null)
 
   // Autocomplete memory for equipment
   const equipmentMemory = useInputMemory({ fieldType: "equipment" })
@@ -476,97 +477,173 @@ export function DailyReports() {
                 {weeklyReport?.isWeekComplete ? "Final totals for the week" : "Week-to-date accumulated totals"}
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                if (isExportingPDF || !weeklyReport) return
-                setIsExportingPDF(true)
-                setPdfBlobUrl(null)
-                
-                const weekStartStr = weeklyReport.weekStart
-                
-                // Detect mobile
-                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-                
-                // Create abort controller for timeout
-                const controller = new AbortController()
-                const timeoutId = setTimeout(() => controller.abort(), 30000)
-                
-                try {
-                  const response = await fetch(`/api/export-pdf?weekStart=${weekStartStr}`, {
-                    signal: controller.signal
-                  })
-                  clearTimeout(timeoutId)
+          </Card>
+
+          {/* Export PDF Buttons */}
+          <Card className="p-4 bg-card border-border">
+            <p className="text-sm font-semibold text-foreground mb-3">Export Weekly Reports</p>
+            <div className="flex flex-col gap-2">
+              {/* Master Timesheet Button */}
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (exportingType || !weeklyReport) return
+                  setExportingType("master")
+                  setPdfBlobUrl(null)
+                  setPdfType(null)
                   
-                  if (!response.ok) {
-                    let errorMsg = "PDF generation failed"
-                    try {
-                      const errorData = await response.json()
-                      errorMsg = errorData.error || errorMsg
-                    } catch {
-                      // Response wasn't JSON
+                  const weekStartStr = weeklyReport.weekStart
+                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                  const controller = new AbortController()
+                  const timeoutId = setTimeout(() => controller.abort(), 30000)
+                  
+                  try {
+                    const response = await fetch(`/api/export-pdf/master?weekStart=${weekStartStr}`, {
+                      signal: controller.signal
+                    })
+                    clearTimeout(timeoutId)
+                    
+                    if (!response.ok) {
+                      let errorMsg = "PDF generation failed"
+                      try {
+                        const errorData = await response.json()
+                        errorMsg = errorData.error || errorMsg
+                      } catch {}
+                      alert(errorMsg)
+                      return
                     }
-                    alert(errorMsg)
-                    return
+                    
+                    const blob = await response.blob()
+                    if (blob.size === 0) {
+                      alert("Error: Empty PDF received")
+                      return
+                    }
+                    
+                    const url = window.URL.createObjectURL(blob)
+                    setPdfBlobUrl(url)
+                    setPdfType("master")
+                    
+                    if (isMobile) {
+                      window.open(url, "_blank")
+                    } else {
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `Weekly_Timesheet_Master_${weekStartStr}.pdf`
+                      a.style.display = "none"
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                    }
+                  } catch (err) {
+                    clearTimeout(timeoutId)
+                    if (err instanceof Error && err.name === "AbortError") {
+                      alert("Export timed out. Please try again.")
+                    } else {
+                      alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+                    }
+                  } finally {
+                    setExportingType(null)
                   }
+                }}
+                disabled={!!exportingType || !weeklyReport || weeklyReport.workerCount === 0}
+                className="w-full justify-start border-border h-12"
+              >
+                {exportingType === "master" ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                <div className="text-left">
+                  <div className="font-medium">Weekly Timesheet Master</div>
+                  <div className="text-xs text-muted-foreground">Official crew sheet with daily breakdown</div>
+                </div>
+              </Button>
+              
+              {/* Summary Report Button */}
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (exportingType || !weeklyReport) return
+                  setExportingType("summary")
+                  setPdfBlobUrl(null)
+                  setPdfType(null)
                   
-                  const blob = await response.blob()
+                  const weekStartStr = weeklyReport.weekStart
+                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                  const controller = new AbortController()
+                  const timeoutId = setTimeout(() => controller.abort(), 30000)
                   
-                  if (blob.size === 0) {
-                    alert("Error: Empty PDF received")
-                    return
+                  try {
+                    const response = await fetch(`/api/export-pdf/summary?weekStart=${weekStartStr}`, {
+                      signal: controller.signal
+                    })
+                    clearTimeout(timeoutId)
+                    
+                    if (!response.ok) {
+                      let errorMsg = "PDF generation failed"
+                      try {
+                        const errorData = await response.json()
+                        errorMsg = errorData.error || errorMsg
+                      } catch {}
+                      alert(errorMsg)
+                      return
+                    }
+                    
+                    const blob = await response.blob()
+                    if (blob.size === 0) {
+                      alert("Error: Empty PDF received")
+                      return
+                    }
+                    
+                    const url = window.URL.createObjectURL(blob)
+                    setPdfBlobUrl(url)
+                    setPdfType("summary")
+                    
+                    if (isMobile) {
+                      window.open(url, "_blank")
+                    } else {
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `Weekly_Summary_${weekStartStr}.pdf`
+                      a.style.display = "none"
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                    }
+                  } catch (err) {
+                    clearTimeout(timeoutId)
+                    if (err instanceof Error && err.name === "AbortError") {
+                      alert("Export timed out. Please try again.")
+                    } else {
+                      alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+                    }
+                  } finally {
+                    setExportingType(null)
                   }
-                  
-                  // Create blob URL
-                  const url = window.URL.createObjectURL(blob)
-                  setPdfBlobUrl(url)
-                  
-                  // On mobile: open directly in new tab (most reliable)
-                  if (isMobile) {
-                    window.open(url, "_blank")
-                  } else {
-                    // On desktop: try download
-                    const a = document.createElement("a")
-                    a.href = url
-                    a.download = `Weekly_Timesheet_${weekStartStr}.pdf`
-                    a.style.display = "none"
-                    document.body.appendChild(a)
-                    a.click()
-                    document.body.removeChild(a)
-                  }
-                  
-                } catch (err) {
-                  clearTimeout(timeoutId)
-                  if (err instanceof Error && err.name === "AbortError") {
-                    alert("Export timed out. Please try again.")
-                  } else {
-                    alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
-                  }
-                } finally {
-                  setIsExportingPDF(false)
-                }
-              }}
-              disabled={isExportingPDF || !weeklyReport || weeklyReport.workerCount === 0}
-              className="border-border shrink-0"
-            >
-              {isExportingPDF ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Export PDF</span>
-                </>
-              )}
-            </Button>
+                }}
+                disabled={!!exportingType || !weeklyReport || weeklyReport.workerCount === 0}
+                className="w-full justify-start border-border h-12"
+              >
+                {exportingType === "summary" ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                <div className="text-left">
+                  <div className="font-medium">Weekly Summary Report</div>
+                  <div className="text-xs text-muted-foreground">Quick overview for email/sharing</div>
+                </div>
+              </Button>
+            </div>
           </Card>
 
           {/* PDF Actions - shown when blob URL exists */}
           {pdfBlobUrl && (
             <Card className="p-4 bg-chart-3/10 border-chart-3/30">
-              <p className="text-sm text-chart-3 font-semibold mb-3">PDF Ready!</p>
+              <p className="text-sm text-chart-3 font-semibold mb-3">
+                {pdfType === "master" ? "Timesheet Master" : "Summary Report"} Ready!
+              </p>
               <div className="flex flex-col gap-2">
-                {/* Primary action - Open PDF */}
                 <Button
                   onClick={() => window.open(pdfBlobUrl, "_blank")}
                   className="w-full bg-chart-3 hover:bg-chart-3/90 text-primary-foreground"
@@ -575,7 +652,6 @@ export function DailyReports() {
                   Open PDF
                 </Button>
                 
-                {/* Secondary actions row */}
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -583,7 +659,9 @@ export function DailyReports() {
                     onClick={() => {
                       const a = document.createElement("a")
                       a.href = pdfBlobUrl
-                      a.download = `Weekly_Timesheet_${weeklyReport?.weekStart || "export"}.pdf`
+                      a.download = pdfType === "master" 
+                        ? `Weekly_Timesheet_Master_${weeklyReport?.weekStart || "export"}.pdf`
+                        : `Weekly_Summary_${weeklyReport?.weekStart || "export"}.pdf`
                       a.click()
                     }}
                     className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
@@ -592,7 +670,6 @@ export function DailyReports() {
                     Download
                   </Button>
                   
-                  {/* Share button - only if native share is supported */}
                   {typeof navigator !== "undefined" && navigator.share && (
                     <Button
                       variant="outline"
@@ -601,14 +678,15 @@ export function DailyReports() {
                         try {
                           const response = await fetch(pdfBlobUrl)
                           const blob = await response.blob()
-                          const file = new File([blob], `Weekly_Timesheet_${weeklyReport?.weekStart || "export"}.pdf`, { type: "application/pdf" })
+                          const filename = pdfType === "master" 
+                            ? `Weekly_Timesheet_Master_${weeklyReport?.weekStart || "export"}.pdf`
+                            : `Weekly_Summary_${weeklyReport?.weekStart || "export"}.pdf`
+                          const file = new File([blob], filename, { type: "application/pdf" })
                           await navigator.share({
                             files: [file],
-                            title: "Weekly Timesheet",
+                            title: pdfType === "master" ? "Weekly Timesheet Master" : "Weekly Summary Report",
                           })
-                        } catch (err) {
-                          // Share cancelled or failed - silent fail
-                        }
+                        } catch {}
                       }}
                       className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
                     >
@@ -622,6 +700,7 @@ export function DailyReports() {
                     onClick={() => {
                       window.URL.revokeObjectURL(pdfBlobUrl)
                       setPdfBlobUrl(null)
+                      setPdfType(null)
                     }}
                     className="text-muted-foreground px-2"
                   >
