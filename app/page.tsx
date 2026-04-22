@@ -58,12 +58,27 @@ export default function CrewTimesheetApp() {
   if (!mounted) {
     return (
       <div 
-        className="min-h-screen max-w-md mx-auto flex flex-col items-center justify-center"
-        style={{ backgroundColor: '#1a1b2e' }}
+        style={{ 
+          minHeight: '100vh',
+          maxWidth: '28rem',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1b2e',
+        }}
       >
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#5b8def' }} />
-          <p className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Loading...</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+          <Loader2 
+            style={{ 
+              height: '2rem', 
+              width: '2rem', 
+              color: '#5b8def',
+              animation: 'spin 1s linear infinite',
+            }} 
+          />
+          <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#a1a1aa' }}>Loading...</p>
         </div>
       </div>
     )
