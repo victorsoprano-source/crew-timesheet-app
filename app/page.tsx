@@ -9,15 +9,19 @@ import { DailyReports } from "@/components/crew-timesheet/daily-reports"
 import { Certifications } from "@/components/crew-timesheet/certifications"
 import { BottomNav } from "@/components/crew-timesheet/bottom-nav"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, HardHat } from "lucide-react"
 
 export default function CrewTimesheetApp() {
-  const [mounted, setMounted] = useState(false)
+  const [appReady, setAppReady] = useState(false)
   const [currentScreen, setCurrentScreen] = useState("dashboard")
 
-  // Wait for client-side hydration to complete
+  // Wait for client-side hydration and a brief delay for styles to load
   useEffect(() => {
-    setMounted(true)
+    // Small delay to ensure CSS is fully parsed and applied
+    const timer = setTimeout(() => {
+      setAppReady(true)
+    }, 100)
+    return () => clearTimeout(timer)
   }, [])
 
   const getScreenTitle = (screen: string) => {
@@ -54,8 +58,8 @@ export default function CrewTimesheetApp() {
     }
   }
 
-  // Show loading screen until client is mounted to prevent FOUC
-  if (!mounted) {
+  // Show loading screen until app is ready to prevent FOUC
+  if (!appReady) {
     return (
       <div 
         style={{ 
@@ -67,18 +71,49 @@ export default function CrewTimesheetApp() {
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: '#1a1b2e',
+          padding: '1rem',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-          <Loader2 
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
+          {/* App Icon */}
+          <div 
             style={{ 
-              height: '2rem', 
-              width: '2rem', 
-              color: '#5b8def',
-              animation: 'spin 1s linear infinite',
-            }} 
-          />
-          <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#a1a1aa' }}>Loading...</p>
+              width: '4rem', 
+              height: '4rem', 
+              borderRadius: '1rem',
+              backgroundColor: '#5b8def',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <HardHat style={{ height: '2rem', width: '2rem', color: '#ffffff' }} />
+          </div>
+          
+          {/* App Title */}
+          <h1 style={{ 
+            fontSize: '1.5rem', 
+            fontWeight: 700, 
+            color: '#fafafa',
+            margin: 0,
+          }}>
+            Crew Timesheet
+          </h1>
+          
+          {/* Loading Spinner and Text */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
+            <Loader2 
+              style={{ 
+                height: '1.5rem', 
+                width: '1.5rem', 
+                color: '#5b8def',
+                animation: 'spin 1s linear infinite',
+              }} 
+            />
+            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#a1a1aa', margin: 0 }}>
+              Loading crew data...
+            </p>
+          </div>
         </div>
       </div>
     )
