@@ -31,6 +31,8 @@ export interface DailyFieldReport {
   apprentice_count: number
   equipment: string[]
   problems_notes: string | null
+  foreman_name: string | null
+  project_location: string | null
   created_at: string
   updated_at: string
 }
@@ -428,6 +430,8 @@ export async function getDailyFieldReport(weekStart: string, workDate: string): 
   return {
     ...data,
     equipment: data.equipment || [],
+    foreman_name: data.foreman_name || null,
+    project_location: data.project_location || null,
   }
 }
 
@@ -439,6 +443,8 @@ export async function saveDailyFieldReport(data: {
   apprenticeCount?: number
   equipment?: string[]
   problemsNotes?: string
+  foremanName?: string
+  projectLocation?: string
 }): Promise<{ success: boolean; report?: DailyFieldReport; error?: string }> {
   const supabase = await createClient()
 
@@ -453,6 +459,8 @@ export async function saveDailyFieldReport(data: {
         apprentice_count: data.apprenticeCount || 0,
         equipment: data.equipment || [],
         problems_notes: data.problemsNotes || null,
+        foreman_name: data.foremanName || null,
+        project_location: data.projectLocation || null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "week_start,work_date" }

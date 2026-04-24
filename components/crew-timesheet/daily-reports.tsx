@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2 } from "lucide-react"
+import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2, Share2, MapPin, User, Copy, Check } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +39,12 @@ export function DailyReports() {
   const [equipment, setEquipment] = useState<string[]>([])
   const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
+  const [foremanName, setForemanName] = useState("")
+  const [projectLocation, setProjectLocation] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [showShareMenu, setShowShareMenu] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const getWeekDays = (weekStart: Date) => {
     const days = []
@@ -211,6 +216,8 @@ export function DailyReports() {
       setApprenticeCount(report.apprentice_count || 0)
       setEquipment(report.equipment || [])
       setProblemsNotes(report.problems_notes || "")
+      setForemanName(report.foreman_name || "")
+      setProjectLocation(report.project_location || "")
     } else {
       // Reset form for new day
       setWorkPerformed("")
@@ -218,6 +225,8 @@ export function DailyReports() {
       setApprenticeCount(0)
       setEquipment([])
       setProblemsNotes("")
+      setForemanName("")
+      setProjectLocation("")
     }
   }
 
@@ -235,6 +244,8 @@ export function DailyReports() {
         apprenticeCount,
         equipment,
         problemsNotes,
+        foremanName,
+        projectLocation,
       })
     } catch (err) {
       console.error("Error saving field report:", err)
@@ -254,6 +265,254 @@ export function DailyReports() {
     setEquipment(equipment.filter((_, i) => i !== index))
   }
 
+  // Generate PDF report using browser print dialog
+  const generatePDF = () => {
+    if (!selectedDay) return
+    
+    setIsGeneratingPdf(true)
+    
+    try {
+      const reportDate = new Date(selectedDay.date + "T00:00:00")
+      const formattedDate = reportDate.toLocaleDateString("en-US", { 
+        weekday: "long", 
+        year: "numeric", 
+        month: "long", 
+        day: "numeric" 
+      })
+
+      // Create a printable HTML document
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Daily Field Report - ${selectedDay.date}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              padding: 40px;
+              max-width: 800px;
+              margin: 0 auto;
+              color: #1a1a1a;
+              line-height: 1.5;
+            }
+            h1 { 
+              text-align: center; 
+              font-size: 24px; 
+              margin-bottom: 8px;
+              font-weight: 700;
+            }
+            .date { 
+              text-align: center; 
+              color: #666; 
+              margin-bottom: 24px;
+              font-size: 14px;
+            }
+            hr { 
+              border: none; 
+              border-top: 2px solid #e5e5e5; 
+              margin: 20px 0;
+            }
+            .section { margin-bottom: 20px; }
+            .section-title { 
+              font-weight: 600; 
+              font-size: 14px;
+              margin-bottom: 8px;
+              color: #333;
+            }
+            .section-content { 
+              padding-left: 16px;
+              font-size: 14px;
+            }
+            .field-row {
+              display: flex;
+              margin-bottom: 8px;
+            }
+            .field-label {
+              font-weight: 600;
+              min-width: 150px;
+              color: #333;
+            }
+            .field-value {
+              color: #1a1a1a;
+            }
+            ul { 
+              padding-left: 24px;
+              margin: 0;
+            }
+            li {
+              margin-bottom: 4px;
+            }
+            .signature-section {
+              margin-top: 48px;
+              padding-top: 20px;
+            }
+            .signature-line {
+              border-bottom: 1px solid #333;
+              width: 250px;
+              margin-top: 40px;
+              margin-bottom: 8px;
+            }
+            .signature-label {
+              font-size: 12px;
+              color: #666;
+            }
+            .signature-name {
+              font-size: 14px;
+              margin-top: 4px;
+            }
+            @media print {
+              body { padding: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Daily Field Report</h1>
+          <p class="date">${formattedDate}</p>
+          <hr />
+          
+          <div class="section">
+            <div class="field-row">
+              <span class="field-label">Foreman:</span>
+              <span class="field-value">${foremanName || "Not specified"}</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">Project / Location:</span>
+              <span class="field-value">${projectLocation || "Not specified"}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Crew</div>
+            <div class="section-content">
+              <div>Journeymen: ${journeymanCount}</div>
+              <div>Apprentices: ${apprenticeCount}</div>
+              <div><strong>Total: ${journeymanCount + apprenticeCount}</strong></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Work Performed</div>
+            <div class="section-content">
+              ${workPerformed ? workPerformed.replace(/\n/g, '<br />') : "No work description provided"}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Equipment Used</div>
+            <div class="section-content">
+              ${equipment.length > 0 
+                ? `<ul>${equipment.map(e => `<li>${e}</li>`).join('')}</ul>` 
+                : "No equipment listed"}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Notes / Problems</div>
+            <div class="section-content">
+              ${problemsNotes ? problemsNotes.replace(/\n/g, '<br />') : "No notes"}
+            </div>
+          </div>
+
+          <div class="signature-section">
+            <div class="signature-line"></div>
+            <div class="signature-label">Foreman Signature</div>
+            <div class="signature-name">${foremanName || ""}</div>
+          </div>
+        </body>
+        </html>
+      `
+
+      // Open print dialog in a new window
+      const printWindow = window.open('', '_blank')
+      if (printWindow) {
+        printWindow.document.write(printContent)
+        printWindow.document.close()
+        printWindow.focus()
+        
+        // Trigger print dialog after content loads
+        setTimeout(() => {
+          printWindow.print()
+        }, 250)
+      }
+    } catch (err) {
+      console.error("Error generating PDF:", err)
+    } finally {
+      setIsGeneratingPdf(false)
+    }
+  }
+
+  // Generate shareable text
+  const getShareableText = () => {
+    if (!selectedDay) return ""
+    
+    const reportDate = new Date(selectedDay.date + "T00:00:00")
+    const formattedDate = reportDate.toLocaleDateString("en-US", { 
+      weekday: "long", 
+      year: "numeric", 
+      month: "long", 
+      day: "numeric" 
+    })
+
+    return `DAILY FIELD REPORT
+Date: ${formattedDate}
+Foreman: ${foremanName || "Not specified"}
+Project/Location: ${projectLocation || "Not specified"}
+
+CREW:
+- Journeymen: ${journeymanCount}
+- Apprentices: ${apprenticeCount}
+- Total: ${journeymanCount + apprenticeCount}
+
+WORK PERFORMED:
+${workPerformed || "No work description provided"}
+
+EQUIPMENT USED:
+${equipment.length > 0 ? equipment.map(e => `- ${e}`).join("\n") : "No equipment listed"}
+
+NOTES:
+${problemsNotes || "No notes"}
+
+---
+Foreman: ${foremanName || "________________"}`
+  }
+
+  // Handle share
+  const handleShare = async () => {
+    const text = getShareableText()
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Daily Field Report - ${selectedDay?.date}`,
+          text: text,
+        })
+      } catch (err) {
+        // User cancelled or share failed - fall back to copy
+        if ((err as Error).name !== "AbortError") {
+          handleCopyToClipboard()
+        }
+      }
+    } else {
+      setShowShareMenu(true)
+    }
+  }
+
+  // Copy to clipboard
+  const handleCopyToClipboard = async () => {
+    const text = getShareableText()
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => {
+        setCopied(false)
+        setShowShareMenu(false)
+      }, 2000)
+    } catch (err) {
+      console.error("Failed to copy:", err)
+    }
+  }
+
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,6 +523,27 @@ export function DailyReports() {
     loadFieldReport()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDayIndex, weeklyReport?.weekStart])
+
+  // Close share menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (showShareMenu) {
+        setShowShareMenu(false)
+      }
+    }
+    
+    // Small delay to avoid immediate close on the same click
+    const timer = setTimeout(() => {
+      if (showShareMenu) {
+        document.addEventListener("click", handleClickOutside)
+      }
+    }, 100)
+    
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener("click", handleClickOutside)
+    }
+  }, [showShareMenu])
 
   const formatWeekRange = () => {
     if (!weeklyReport) return ""
@@ -562,6 +842,34 @@ export function DailyReports() {
           </Button>
         </div>
 
+        {/* Foreman Name */}
+        <div className="mb-4">
+          <label className="text-sm font-medium text-foreground mb-2 block flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Foreman Name
+          </label>
+          <Input
+            placeholder="Enter foreman name..."
+            value={foremanName}
+            onChange={(e) => setForemanName(e.target.value)}
+            className="bg-input border-border"
+          />
+        </div>
+
+        {/* Project / Location */}
+        <div className="mb-4">
+          <label className="text-sm font-medium text-foreground mb-2 block flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            Project / Location
+          </label>
+          <Input
+            placeholder="Enter project name or location..."
+            value={projectLocation}
+            onChange={(e) => setProjectLocation(e.target.value)}
+            className="bg-input border-border"
+          />
+        </div>
+
         {/* Work Performed */}
         <div className="mb-4">
           <label className="text-sm font-medium text-foreground mb-2 block">Work Performed Today</label>
@@ -645,7 +953,7 @@ export function DailyReports() {
         </div>
 
         {/* Problems / Notes */}
-        <div>
+        <div className="mb-4">
           <label className="text-sm font-medium text-foreground mb-2 block flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             Problems / Notes
@@ -656,6 +964,71 @@ export function DailyReports() {
             onChange={(e) => setProblemsNotes(e.target.value)}
             className="min-h-[60px] bg-input border-border"
           />
+        </div>
+
+        {/* Action Buttons - PDF Download and Share */}
+        <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-border">
+          <Button
+            variant="outline"
+            className="flex-1 h-11 border-border"
+            onClick={generatePDF}
+            disabled={isGeneratingPdf}
+          >
+            {isGeneratingPdf ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </>
+            )}
+          </Button>
+          <div className="relative flex-1">
+            <Button
+              variant="outline"
+              className="w-full h-11 border-border"
+              onClick={handleShare}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share Report
+            </Button>
+            
+            {/* Share Menu Dropdown */}
+            {showShareMenu && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 p-3 bg-card border border-border rounded-lg shadow-lg z-10">
+                <p className="text-sm text-muted-foreground mb-2">Share this report:</p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleCopyToClipboard}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2 text-green-500" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy to Clipboard
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-1 text-muted-foreground"
+                  onClick={() => setShowShareMenu(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 
