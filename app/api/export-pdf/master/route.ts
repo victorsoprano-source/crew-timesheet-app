@@ -28,6 +28,22 @@ function getLevelAbbr(level: string): string {
   }
 }
 
+/**
+ * Sanitize text for PDF rendering - removes/replaces unsupported characters
+ */
+function sanitizeText(text: string | null | undefined): string {
+  if (!text) return ""
+  let result = String(text)
+  result = result.split("").map(char => {
+    const code = char.charCodeAt(0)
+    if (code === 10 || code === 13 || code === 9) return " "
+    if (code < 32 || (code > 126 && code < 160) || code > 255) return ""
+    return char
+  }).join("")
+  result = result.replace(/  +/g, " ")
+  return result.trim() || ""
+}
+
 interface WorkerDailyData {
   name: string
   level: string
@@ -299,11 +315,11 @@ async function generateMasterPDF(
         })
       }
 
-      // Worker name with classification
-      colX = tableX + 5
-      page.drawText(`${worker.name} - ${worker.levelAbbr}`, {
-        x: colX, y: y - 15, size: 8, font: fontBold, color: rgb(0, 0, 0),
-      })
+// Worker name with classification (sanitized)
+  colX = tableX + 5
+  page.drawText(`${sanitizeText(worker.name)} - ${worker.levelAbbr}`, {
+  x: colX, y: y - 15, size: 8, font: fontBold, color: rgb(0, 0, 0),
+  })
 
       colX = tableX + nameColWidth
 
@@ -388,9 +404,10 @@ async function generateMasterPDF(
       })
       y -= 12
       
-      // Truncate notes if too long
+      // Sanitize and truncate notes
+      const sanitizedNotes = sanitizeText(notes)
       const maxNoteLen = 150
-      const displayNotes = notes.length > maxNoteLen ? notes.substring(0, maxNoteLen) + "..." : notes
+      const displayNotes = sanitizedNotes.length > maxNoteLen ? sanitizedNotes.substring(0, maxNoteLen) + "..." : sanitizedNotes
       page.drawText(displayNotes, {
         x: tableX, y: y, size: 8, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
       })

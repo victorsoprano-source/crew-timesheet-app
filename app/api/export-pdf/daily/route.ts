@@ -29,6 +29,36 @@ function getLevelAbbr(level: string | null | undefined): string {
   }
 }
 
+/**
+ * Sanitize text for PDF rendering - removes/replaces unsupported characters
+ * WinAnsi encoding only supports ASCII and some extended Latin characters
+ * CRITICAL: Must remove ALL newlines, tabs, and non-printable characters
+ */
+function sanitizeText(text: string | null | undefined): string {
+  if (!text) return ""
+  
+  let result = String(text)
+  
+  // Replace all whitespace characters (including \n, \r, \t) with spaces
+  // Using character codes to be absolutely explicit
+  result = result.split("").map(char => {
+    const code = char.charCodeAt(0)
+    // Replace newline (10), carriage return (13), tab (9) with space
+    if (code === 10 || code === 13 || code === 9) return " "
+    // Remove any character outside printable ASCII range (32-126) and extended Latin (160-255)
+    if (code < 32 || (code > 126 && code < 160) || code > 255) return ""
+    return char
+  }).join("")
+  
+  // Collapse multiple spaces into one
+  result = result.replace(/  +/g, " ")
+  
+  // Trim whitespace
+  result = result.trim()
+  
+  return result || ""
+}
+
 interface WorkerEntry {
   name: string
   level: string
@@ -619,11 +649,12 @@ async function generateDailyPDF(
   })
 }
 
-// Helper function to wrap text
+// Helper function to wrap text (sanitizes input)
 function wrapText(text: string | null | undefined, font: any, fontSize: number, maxWidth: number): string[] {
-  if (!text) return [""]
+  const sanitized = sanitizeText(text)
+  if (!sanitized) return [""]
   
-  const words = text.split(" ")
+  const words = sanitized.split(" ")
   const lines: string[] = []
   let currentLine = ""
 
@@ -646,14 +677,15 @@ function wrapText(text: string | null | undefined, font: any, fontSize: number, 
   return lines.length > 0 ? lines : [""]
 }
 
-// Helper function to truncate text
+// Helper function to truncate text (sanitizes input)
 function truncateText(text: string | null | undefined, font: any, fontSize: number, maxWidth: number): string {
-  if (!text) return ""
+  const sanitized = sanitizeText(text)
+  if (!sanitized) return ""
   
-  const width = font.widthOfTextAtSize(text, fontSize)
-  if (width <= maxWidth) return text
+  const width = font.widthOfTextAtSize(sanitized, fontSize)
+  if (width <= maxWidth) return sanitized
   
-  let truncated = text
+  let truncated = sanitized
   while (font.widthOfTextAtSize(truncated + "...", fontSize) > maxWidth && truncated.length > 0) {
     truncated = truncated.slice(0, -1)
   }

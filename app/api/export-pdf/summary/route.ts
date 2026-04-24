@@ -28,6 +28,22 @@ function getLevelAbbr(level: string): string {
   }
 }
 
+/**
+ * Sanitize text for PDF rendering - removes/replaces unsupported characters
+ */
+function sanitizeText(text: string | null | undefined): string {
+  if (!text) return ""
+  let result = String(text)
+  result = result.split("").map(char => {
+    const code = char.charCodeAt(0)
+    if (code === 10 || code === 13 || code === 9) return " "
+    if (code < 32 || (code > 126 && code < 160) || code > 255) return ""
+    return char
+  }).join("")
+  result = result.replace(/  +/g, " ")
+  return result.trim() || ""
+}
+
 interface WorkerSummary {
   name: string
   levelAbbr: string
@@ -314,7 +330,7 @@ async function generateSummaryPDF(
       for (const worker of workers) {
         if (y < margin + 120) break
 
-        page.drawText(`${worker.name} - ${worker.levelAbbr}`, {
+        page.drawText(`${sanitizeText(worker.name)} - ${worker.levelAbbr}`, {
           x: margin + 10, y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1),
         })
 
@@ -353,7 +369,9 @@ async function generateSummaryPDF(
       })
       y -= 18
 
-      const equipText = equipment.join(", ")
+      // Sanitize each equipment item
+      const sanitizedEquip = equipment.map(e => sanitizeText(e)).filter(e => e.length > 0)
+      const equipText = sanitizedEquip.join(", ")
       const maxLen = 80
       const displayEquip = equipText.length > maxLen ? equipText.substring(0, maxLen) + "..." : equipText
       page.drawText(displayEquip, {
@@ -369,8 +387,9 @@ async function generateSummaryPDF(
       })
       y -= 18
 
+      const sanitizedNotes = sanitizeText(notes)
       const maxLen = 200
-      const displayNotes = notes.length > maxLen ? notes.substring(0, maxLen) + "..." : notes
+      const displayNotes = sanitizedNotes.length > maxLen ? sanitizedNotes.substring(0, maxLen) + "..." : sanitizedNotes
       page.drawText(displayNotes, {
         x: margin + 10, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
       })
