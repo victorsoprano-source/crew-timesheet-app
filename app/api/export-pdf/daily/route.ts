@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
   let timeoutId: NodeJS.Timeout
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`${operation} timed out`)), ms)
+    timeoutId = setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
   })
   try {
     const result = await Promise.race([promise, timeoutPromise])
@@ -18,7 +18,8 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string
   }
 }
 
-function getLevelAbbr(level: string): string {
+function getLevelAbbr(level: string | null | undefined): string {
+  if (!level) return "JM"
   switch (level) {
     case "Journeyman": return "JM"
     case "Apprentice Year 1": return "APP1"
@@ -40,141 +41,203 @@ interface WorkerEntry {
 }
 
 interface FieldReport {
-  work_performed: string | null
+  work_performed: string
   journeyman_count: number
   apprentice_year1_count: number
   apprentice_year2_count: number
   apprentice_year3_count: number
   equipment: string[]
-  problems_notes: string | null
-}
-
-interface Photo {
-  id: string
-  photo_pathname: string
-  caption: string | null
-  created_at: string
+  problems_notes: string
 }
 
 export async function GET(request: NextRequest) {
+  console.log("[v0] Daily PDF export started")
+  
   try {
     const { searchParams } = new URL(request.url)
     const workDate = searchParams.get("workDate")
     const weekStart = searchParams.get("weekStart")
 
+    console.log("[v0] Parameters - workDate:", workDate, "weekStart:", weekStart)
+
     if (!workDate || !/^\d{4}-\d{2}-\d{2}$/.test(workDate)) {
-      return NextResponse.json({ error: "Invalid workDate parameter" }, { status: 400 })
+      console.log("[v0] Invalid workDate parameter")
+      return NextResponse.json({ error: "Invalid workDate parameter. Expected format: YYYY-MM-DD" }, { status: 400 })
     }
     if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-      return NextResponse.json({ error: "Invalid weekStart parameter" }, { status: 400 })
+      console.log("[v0] Invalid weekStart parameter")
+      return NextResponse.json({ error: "Invalid weekStart parameter. Expected format: YYYY-MM-DD" }, { status: 400 })
     }
 
-    const supabase = await withTimeout(createClient(), 5000, "Supabase client creation")
+    console.log("[v0] Creating Supabase client...")
+    let supabase
+    try {
+      supabase = await withTimeout(createClient(), 5000, "Supabase client creation")
+      console.log("[v0] Supabase client created successfully")
+    } catch (err) {
+      console.error("[v0] Supabase client creation failed:", err)
+      return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })
+    }
 
     // Find timesheet
-    const timesheetResult = await withTimeout(
-      supabase.from("timesheets").select("id").eq("week_start", weekStart).single(),
-      10000,
-      "Timesheet query"
-    )
+    console.log("[v0] Querying timesheet for week_start:", weekStart)
+    let timesheetId: string | null = null
+    try {
+      const timesheetResult = await withTimeout(
+        supabase.from("timesheets").select("id").eq("week_start", weekStart).single(),
+        10000,
+        "Timesheet query"
+      )
+      console.log("[v0] Timesheet query result:", { data: timesheetResult.data, error: timesheetResult.error?.message })
+      timesheetId = timesheetResult.data?.id || null
+    } catch (err) {
+      console.error("[v0] Timesheet query failed:", err)
+      // Continue without timesheet - we'll show empty workers
+    }
 
     let workers: WorkerEntry[] = []
     let totalST = 0
     let totalOT = 0
     let totalDT = 0
 
-    if (timesheetResult.data) {
-      // Get entries for this day with worker info
-      const entriesResult = await withTimeout(
-        supabase
-          .from("timesheet_entries")
-          .select(`
-            worker_id,
-            regular_hours,
-            overtime_hours,
-            double_time_hours,
-            attendance_status,
-            worker:workers(id, name, level)
-          `)
-          .eq("timesheet_id", timesheetResult.data.id)
-          .eq("work_date", workDate),
-        10000,
-        "Entries query"
-      )
+    if (timesheetId) {
+      console.log("[v0] Querying entries for timesheet_id:", timesheetId, "work_date:", workDate)
+      try {
+        const entriesResult = await withTimeout(
+          supabase
+            .from("timesheet_entries")
+            .select(`
+              worker_id,
+              regular_hours,
+              overtime_hours,
+              double_time_hours,
+              attendance_status,
+              worker:workers(id, name, level)
+            `)
+            .eq("timesheet_id", timesheetId)
+            .eq("work_date", workDate),
+          10000,
+          "Entries query"
+        )
+        
+        console.log("[v0] Entries query result:", { 
+          count: entriesResult.data?.length || 0, 
+          error: entriesResult.error?.message 
+        })
 
-      if (entriesResult.data) {
-        for (const entry of entriesResult.data) {
-          const worker = entry.worker as { id: string; name: string; level: string } | null
-          const status = entry.attendance_status || "Present"
-          const isAbsent = status === "Absent"
-          
-          const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
-          const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
-          const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
-          
-          totalST += st
-          totalOT += ot
-          totalDT += dt
+        if (entriesResult.data && Array.isArray(entriesResult.data)) {
+          for (const entry of entriesResult.data) {
+            // Safely extract worker data
+            const workerData = entry.worker as { id?: string; name?: string; level?: string } | null
+            const workerName = workerData?.name || "Unknown Worker"
+            const workerLevel = workerData?.level || "Journeyman"
+            
+            const status = entry.attendance_status || "Present"
+            const isAbsent = status === "Absent"
+            
+            const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
+            const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
+            const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
+            
+            totalST += st
+            totalOT += ot
+            totalDT += dt
 
-          workers.push({
-            name: worker?.name || "Unknown",
-            level: worker?.level || "Journeyman",
-            levelAbbr: getLevelAbbr(worker?.level || "Journeyman"),
-            st,
-            ot,
-            dt,
-            total: st + ot + dt,
-            status,
-          })
+            workers.push({
+              name: workerName,
+              level: workerLevel,
+              levelAbbr: getLevelAbbr(workerLevel),
+              st,
+              ot,
+              dt,
+              total: st + ot + dt,
+              status,
+            })
+          }
         }
+      } catch (err) {
+        console.error("[v0] Entries query failed:", err)
+        // Continue with empty workers
       }
     }
 
     // Sort workers by name
     workers.sort((a, b) => a.name.localeCompare(b.name))
+    console.log("[v0] Workers processed:", workers.length)
 
-    // Get field report data
-    const fieldReportResult = await withTimeout(
-      supabase
-        .from("daily_field_reports")
-        .select("work_performed, journeyman_count, apprentice_year1_count, apprentice_year2_count, apprentice_year3_count, equipment, problems_notes")
-        .eq("week_start", weekStart)
-        .eq("work_date", workDate)
-        .single(),
-      10000,
-      "Field report query"
-    )
-
-    const fieldReport: FieldReport = fieldReportResult.data || {
-      work_performed: null,
+    // Get field report data with safe defaults
+    console.log("[v0] Querying field report for week_start:", weekStart, "work_date:", workDate)
+    let fieldReport: FieldReport = {
+      work_performed: "No work description provided.",
       journeyman_count: 0,
       apprentice_year1_count: 0,
       apprentice_year2_count: 0,
       apprentice_year3_count: 0,
       equipment: [],
-      problems_notes: null,
+      problems_notes: "No notes recorded.",
     }
 
-    // Get photos for this day
-    const photosResult = await withTimeout(
-      supabase
-        .from("report_photos")
-        .select("id, photo_pathname, caption, created_at")
-        .eq("week_start", weekStart)
-        .eq("work_date", workDate)
-        .order("created_at", { ascending: true }),
-      10000,
-      "Photos query"
-    )
+    try {
+      const fieldReportResult = await withTimeout(
+        supabase
+          .from("daily_field_reports")
+          .select("work_performed, journeyman_count, apprentice_year1_count, apprentice_year2_count, apprentice_year3_count, equipment, problems_notes")
+          .eq("week_start", weekStart)
+          .eq("work_date", workDate)
+          .single(),
+        10000,
+        "Field report query"
+      )
+      
+      console.log("[v0] Field report query result:", { 
+        hasData: !!fieldReportResult.data, 
+        error: fieldReportResult.error?.message 
+      })
 
-    const photos: Photo[] = photosResult.data || []
+      if (fieldReportResult.data) {
+        const data = fieldReportResult.data
+        fieldReport = {
+          work_performed: data.work_performed || "No work description provided.",
+          journeyman_count: Number(data.journeyman_count) || 0,
+          apprentice_year1_count: Number(data.apprentice_year1_count) || 0,
+          apprentice_year2_count: Number(data.apprentice_year2_count) || 0,
+          apprentice_year3_count: Number(data.apprentice_year3_count) || 0,
+          equipment: Array.isArray(data.equipment) ? data.equipment : [],
+          problems_notes: data.problems_notes || "No notes recorded.",
+        }
+      }
+    } catch (err) {
+      console.error("[v0] Field report query failed:", err)
+      // Continue with default values
+    }
+
+    console.log("[v0] Field report data:", {
+      hasWorkPerformed: fieldReport.work_performed !== "No work description provided.",
+      equipmentCount: fieldReport.equipment.length,
+      hasNotes: fieldReport.problems_notes !== "No notes recorded.",
+    })
+
+    // PHOTOS DISABLED FOR NOW
+    console.log("[v0] Photos temporarily disabled - skipping photo query")
+    const photoCount = 0
 
     // Generate PDF
-    return generateDailyPDF(workDate, workers, totalST, totalOT, totalDT, fieldReport, photos)
+    console.log("[v0] Starting PDF generation...")
+    try {
+      const response = await generateDailyPDF(workDate, workers, totalST, totalOT, totalDT, fieldReport, photoCount)
+      console.log("[v0] PDF generation completed successfully")
+      return response
+    } catch (pdfError) {
+      console.error("[v0] PDF generation failed:", pdfError)
+      return NextResponse.json(
+        { error: `PDF generation error: ${pdfError instanceof Error ? pdfError.message : "Unknown error"}` },
+        { status: 500 }
+      )
+    }
   } catch (error) {
-    console.error("Daily PDF export error:", error)
+    console.error("[v0] Daily PDF export error:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate PDF" },
+      { error: `Export failed: ${error instanceof Error ? error.message : "Unknown error"}` },
       { status: 500 }
     )
   }
@@ -187,8 +250,9 @@ async function generateDailyPDF(
   totalOT: number,
   totalDT: number,
   fieldReport: FieldReport,
-  photos: Photo[]
+  photoCount: number
 ): Promise<NextResponse> {
+  console.log("[v0] Creating PDF document...")
   const pdfDoc = await PDFDocument.create()
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
@@ -239,11 +303,18 @@ async function generateDailyPDF(
     y -= 28
   }
 
-  // Format date
-  const dateObj = new Date(workDate + "T12:00:00")
-  const dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" })
-  const formattedDate = dateObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+  // Format date safely
+  let dayName = "Unknown"
+  let formattedDate = workDate
+  try {
+    const dateObj = new Date(workDate + "T12:00:00")
+    dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" })
+    formattedDate = dateObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+  } catch (e) {
+    console.error("[v0] Date formatting error:", e)
+  }
 
+  console.log("[v0] Drawing header...")
   // ========== HEADER ==========
   page.drawText("Ahern Painting Cont., Inc.", {
     x: margin,
@@ -264,7 +335,7 @@ async function generateDailyPDF(
   y -= 20
 
   // Job and Date info
-  page.drawText(`Job: C34921R`, {
+  page.drawText("Job: C34921R", {
     x: margin,
     y,
     size: 10,
@@ -280,11 +351,11 @@ async function generateDailyPDF(
   })
   y -= 25
 
+  console.log("[v0] Drawing Work Performed section...")
   // ========== WORK PERFORMED ==========
   drawSectionHeader("Work Performed Today")
   
-  const workText = fieldReport.work_performed || "No work recorded for this day."
-  const workLines = wrapText(workText, helvetica, 10, contentWidth - 16)
+  const workLines = wrapText(fieldReport.work_performed, helvetica, 10, contentWidth - 16)
   for (const line of workLines) {
     checkPageBreak(14)
     page.drawText(line, {
@@ -298,6 +369,7 @@ async function generateDailyPDF(
   }
   y -= 10
 
+  console.log("[v0] Drawing Crew Summary section...")
   // ========== CREW SUMMARY ==========
   drawSectionHeader("Crew Summary")
   
@@ -355,6 +427,7 @@ async function generateDailyPDF(
   })
   y -= 20
 
+  console.log("[v0] Drawing Hours Summary section...")
   // ========== HOURS SUMMARY ==========
   drawSectionHeader("Hours Summary")
   
@@ -409,10 +482,11 @@ async function generateDailyPDF(
   })
   y -= 20
 
+  console.log("[v0] Drawing Worker Breakdown section...")
   // ========== WORKER BREAKDOWN ==========
+  drawSectionHeader("Worker Breakdown")
+  
   if (workers.length > 0) {
-    drawSectionHeader("Worker Breakdown")
-    
     // Table header
     checkPageBreak(20)
     page.drawRectangle({
@@ -446,26 +520,8 @@ async function generateDailyPDF(
       page.drawText(worker.status, { x: cols.status, y, size: 9, font: helvetica, color: black })
       y -= 14
     }
-    y -= 10
-  }
-
-  // ========== EQUIPMENT USED ==========
-  drawSectionHeader("Equipment Used")
-  
-  if (fieldReport.equipment && fieldReport.equipment.length > 0) {
-    for (const item of fieldReport.equipment) {
-      checkPageBreak(14)
-      page.drawText(`• ${item}`, {
-        x: margin + 8,
-        y,
-        size: 10,
-        font: helvetica,
-        color: black,
-      })
-      y -= 14
-    }
   } else {
-    page.drawText("No equipment recorded.", {
+    page.drawText("No worker data available for this day.", {
       x: margin + 8,
       y,
       size: 10,
@@ -476,11 +532,41 @@ async function generateDailyPDF(
   }
   y -= 10
 
+  console.log("[v0] Drawing Equipment section...")
+  // ========== EQUIPMENT USED ==========
+  drawSectionHeader("Equipment Used")
+  
+  if (fieldReport.equipment.length > 0) {
+    for (const item of fieldReport.equipment) {
+      if (item && typeof item === "string") {
+        checkPageBreak(14)
+        page.drawText(`• ${item}`, {
+          x: margin + 8,
+          y,
+          size: 10,
+          font: helvetica,
+          color: black,
+        })
+        y -= 14
+      }
+    }
+  } else {
+    page.drawText("No equipment listed.", {
+      x: margin + 8,
+      y,
+      size: 10,
+      font: helvetica,
+      color: darkGray,
+    })
+    y -= 14
+  }
+  y -= 10
+
+  console.log("[v0] Drawing Notes section...")
   // ========== PROBLEMS / NOTES ==========
   drawSectionHeader("Problems / Notes")
   
-  const notesText = fieldReport.problems_notes || "No issues or notes recorded."
-  const notesLines = wrapText(notesText, helvetica, 10, contentWidth - 16)
+  const notesLines = wrapText(fieldReport.problems_notes, helvetica, 10, contentWidth - 16)
   for (const line of notesLines) {
     checkPageBreak(14)
     page.drawText(line, {
@@ -494,94 +580,20 @@ async function generateDailyPDF(
   }
   y -= 10
 
-  // ========== PHOTOS ==========
-  if (photos.length > 0) {
-    drawSectionHeader(`Photos (${photos.length})`)
-    
-    for (const photo of photos) {
-      try {
-        // Fetch photo from blob storage
-        const photoUrl = `${process.env.BLOB_URL || ""}/${photo.photo_pathname}`
-        const response = await fetch(photoUrl)
-        
-        if (response.ok) {
-          const imageBytes = await response.arrayBuffer()
-          const contentType = response.headers.get("content-type") || ""
-          
-          let image
-          if (contentType.includes("jpeg") || contentType.includes("jpg")) {
-            image = await pdfDoc.embedJpg(imageBytes)
-          } else if (contentType.includes("png")) {
-            image = await pdfDoc.embedPng(imageBytes)
-          }
-          
-          if (image) {
-            // Calculate image dimensions to fit
-            const maxWidth = 200
-            const maxHeight = 150
-            const aspectRatio = image.width / image.height
-            let imgWidth = maxWidth
-            let imgHeight = imgWidth / aspectRatio
-            if (imgHeight > maxHeight) {
-              imgHeight = maxHeight
-              imgWidth = imgHeight * aspectRatio
-            }
-            
-            checkPageBreak(imgHeight + 40)
-            
-            page.drawImage(image, {
-              x: margin + 8,
-              y: y - imgHeight,
-              width: imgWidth,
-              height: imgHeight,
-            })
-            
-            // Draw caption next to image
-            const captionX = margin + imgWidth + 20
-            const captionWidth = contentWidth - imgWidth - 28
-            
-            if (photo.caption) {
-              const captionLines = wrapText(photo.caption, helvetica, 9, captionWidth)
-              let captionY = y - 10
-              for (const line of captionLines) {
-                page.drawText(line, {
-                  x: captionX,
-                  y: captionY,
-                  size: 9,
-                  font: helvetica,
-                  color: black,
-                })
-                captionY -= 12
-              }
-            }
-            
-            // Photo date
-            const photoDate = new Date(photo.created_at).toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })
-            page.drawText(photoDate, {
-              x: captionX,
-              y: y - imgHeight + 10,
-              size: 8,
-              font: helvetica,
-              color: darkGray,
-            })
-            
-            y -= imgHeight + 15
-          }
-        }
-      } catch (photoError) {
-        // Skip photo if fetch fails
-        console.error("Failed to embed photo:", photoError)
-      }
-    }
-    y -= 10
+  // ========== PHOTOS (DISABLED) ==========
+  if (photoCount > 0) {
+    drawSectionHeader("Photos")
+    page.drawText(`${photoCount} photo(s) available - photo embedding temporarily disabled.`, {
+      x: margin + 8,
+      y,
+      size: 10,
+      font: helvetica,
+      color: darkGray,
+    })
+    y -= 14
   }
 
+  console.log("[v0] Drawing footer...")
   // ========== FOOTER ==========
   checkPageBreak(30)
   y -= 20
@@ -594,7 +606,9 @@ async function generateDailyPDF(
   })
 
   // Save PDF
+  console.log("[v0] Saving PDF...")
   const pdfBytes = await pdfDoc.save()
+  console.log("[v0] PDF saved, size:", pdfBytes.length, "bytes")
 
   return new NextResponse(pdfBytes, {
     status: 200,
@@ -606,7 +620,9 @@ async function generateDailyPDF(
 }
 
 // Helper function to wrap text
-function wrapText(text: string, font: any, fontSize: number, maxWidth: number): string[] {
+function wrapText(text: string | null | undefined, font: any, fontSize: number, maxWidth: number): string[] {
+  if (!text) return [""]
+  
   const words = text.split(" ")
   const lines: string[] = []
   let currentLine = ""
@@ -631,7 +647,9 @@ function wrapText(text: string, font: any, fontSize: number, maxWidth: number): 
 }
 
 // Helper function to truncate text
-function truncateText(text: string, font: any, fontSize: number, maxWidth: number): string {
+function truncateText(text: string | null | undefined, font: any, fontSize: number, maxWidth: number): string {
+  if (!text) return ""
+  
   const width = font.widthOfTextAtSize(text, fontSize)
   if (width <= maxWidth) return text
   
