@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { AutocompleteInput } from "@/components/ui/autocomplete-input"
+import { CostCodeAutocomplete } from "@/components/ui/cost-code-autocomplete"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronLeft, ChevronRight, Save, Plus, Trash2, Loader2, CheckCircle, Camera, X, ImageIcon } from "lucide-react"
 import { getWorkers, getActiveWorkers, type Worker } from "@/app/actions/workers"
@@ -574,16 +574,16 @@ return { ...e, [field]: value }
                 </div>
               </div>
 
-              {/* Job Code and Photo */}
+              {/* Cost Code and Photo */}
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Job Code</label>
-                  <AutocompleteInput
-                    fieldType="jobCode"
-                    placeholder="e.g., JOB-001"
+                  <label className="text-xs text-muted-foreground mb-1 block">Cost Code</label>
+                  <CostCodeAutocomplete
                     value={entry.jobCode}
                     onChange={(value) => updateEntry(entry.id, "jobCode", value)}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground h-9"
+                    jobGroup="C-34921"
+                    placeholder="Search code..."
+                    className="bg-input border-border text-foreground placeholder:text-muted-foreground h-9 text-sm"
                   />
                 </div>
                 <div>
