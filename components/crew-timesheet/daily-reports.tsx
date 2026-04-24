@@ -61,6 +61,8 @@ export function DailyReports() {
   const [exportingType, setExportingType] = useState<"master" | "summary" | "daily" | null>(null)
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
   const [pdfType, setPdfType] = useState<"master" | "summary" | "daily" | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
 
   // Autocomplete memory for equipment
   const equipmentMemory = useInputMemory({ fieldType: "equipment" })
@@ -1020,41 +1022,116 @@ export function DailyReports() {
             </Button>
             
             <div className="flex gap-2">
+              {/* Download Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  const a = document.createElement("a")
-                  a.href = pdfBlobUrl
-                  a.download = `Daily_Field_Report_${selectedDay?.date || "export"}.pdf`
-                  a.click()
+                disabled={isDownloading}
+                onClick={async () => {
+                  if (!pdfBlobUrl) return
+                  setIsDownloading(true)
+                  
+                  const filename = `Daily-Field-Report-C34921R-${selectedDay?.date || "export"}.pdf`
+                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                  
+                  try {
+                    // Try anchor download first
+                    const a = document.createElement("a")
+                    a.href = pdfBlobUrl
+                    a.download = filename
+                    a.style.display = "none"
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    
+                    // On mobile, also open in new tab as fallback
+                    if (isMobile) {
+                      // Small delay then open in new tab as backup
+                      setTimeout(() => {
+                        window.open(pdfBlobUrl, "_blank")
+                      }, 500)
+                    }
+                  } catch (err) {
+                    // Fallback: open in new tab
+                    window.open(pdfBlobUrl, "_blank")
+                  } finally {
+                    setIsDownloading(false)
+                  }
                 }}
                 className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
               >
-                <Download className="h-4 w-4 mr-1" />
-                Download
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </>
+                )}
               </Button>
               
-              {typeof navigator !== "undefined" && navigator.share && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    try {
-                      const response = await fetch(pdfBlobUrl)
-                      const blob = await response.blob()
-                      const file = new File([blob], `Daily_Field_Report_${selectedDay?.date || "export"}.pdf`, { type: "application/pdf" })
+              {/* Share Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isSharing}
+                onClick={async () => {
+                  if (!pdfBlobUrl) return
+                  setIsSharing(true)
+                  
+                  const filename = `Daily-Field-Report-C34921R-${selectedDay?.date || "export"}.pdf`
+                  
+                  try {
+                    // Check if navigator.share is available
+                    if (!navigator.share) {
+                      alert("Sharing is not supported on this device. Use Download or Open PDF.")
+                      return
+                    }
+                    
+                    // Fetch the blob from the URL
+                    const response = await fetch(pdfBlobUrl)
+                    const blob = await response.blob()
+                    
+                    // Check if file sharing is supported
+                    const file = new File([blob], filename, { type: "application/pdf" })
+                    const canShareFiles = navigator.canShare && navigator.canShare({ files: [file] })
+                    
+                    if (canShareFiles) {
+                      // Share the file directly
                       await navigator.share({
                         files: [file],
                         title: "Daily Field Report",
                       })
-                    } catch {}
-                  }}
-                  className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
-                >
-                  Share
-                </Button>
-              )}
+                    } else {
+                      // File sharing not supported, try sharing just text/url
+                      // Since blob URLs don't work externally, inform user
+                      alert("File sharing is not supported on this device. Use Download or Open PDF to save the file first.")
+                    }
+                  } catch (err) {
+                    // User cancelled share or error occurred
+                    if (err instanceof Error && err.name !== "AbortError") {
+                      alert("Sharing failed. Use Download or Open PDF instead.")
+                    }
+                  } finally {
+                    setIsSharing(false)
+                  }
+                }}
+                className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+              >
+                {isSharing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Sharing...
+                  </>
+                ) : (
+                  <>
+                    Share
+                  </>
+                )}
+              </Button>
               
               <Button
                 variant="ghost"
