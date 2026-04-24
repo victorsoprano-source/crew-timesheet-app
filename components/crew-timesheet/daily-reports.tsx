@@ -58,9 +58,9 @@ export function DailyReports() {
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
-  const [exportingType, setExportingType] = useState<"master" | "summary" | null>(null)
+  const [exportingType, setExportingType] = useState<"master" | "summary" | "daily" | null>(null)
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
-  const [pdfType, setPdfType] = useState<"master" | "summary" | null>(null)
+  const [pdfType, setPdfType] = useState<"master" | "summary" | "daily" | null>(null)
 
   // Autocomplete memory for equipment
   const equipmentMemory = useInputMemory({ fieldType: "equipment" })
@@ -637,8 +637,8 @@ export function DailyReports() {
             </div>
           </Card>
 
-          {/* PDF Actions - shown when blob URL exists */}
-          {pdfBlobUrl && (
+          {/* PDF Actions - shown when blob URL exists (for weekly exports only) */}
+          {pdfBlobUrl && (pdfType === "master" || pdfType === "summary") && (
             <Card className="p-4 bg-chart-3/10 border-chart-3/30">
               <p className="text-sm text-chart-3 font-semibold mb-3">
                 {pdfType === "master" ? "Timesheet Master" : "Summary Report"} Ready!
@@ -929,6 +929,146 @@ export function DailyReports() {
                 <span className="text-sm font-bold">{day.dayNum}</span>
               </Button>
             ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Export Daily PDF Button */}
+      <Button
+        variant="outline"
+        onClick={async () => {
+          if (exportingType || !weeklyReport || !selectedDay) return
+          setExportingType("daily")
+          setPdfBlobUrl(null)
+          setPdfType(null)
+          
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s for photos
+          
+          try {
+            const response = await fetch(
+              `/api/export-pdf/daily?workDate=${selectedDay.date}&weekStart=${weeklyReport.weekStart}`,
+              { signal: controller.signal }
+            )
+            clearTimeout(timeoutId)
+            
+            if (!response.ok) {
+              let errorMsg = "PDF generation failed"
+              try {
+                const errorData = await response.json()
+                errorMsg = errorData.error || errorMsg
+              } catch {}
+              alert(errorMsg)
+              return
+            }
+            
+            const blob = await response.blob()
+            if (blob.size === 0) {
+              alert("Error: Empty PDF received")
+              return
+            }
+            
+            const url = window.URL.createObjectURL(blob)
+            setPdfBlobUrl(url)
+            setPdfType("daily")
+            
+            if (isMobile) {
+              window.open(url, "_blank")
+            } else {
+              const a = document.createElement("a")
+              a.href = url
+              a.download = `Daily_Field_Report_${selectedDay.date}.pdf`
+              a.style.display = "none"
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+            }
+          } catch (err) {
+            clearTimeout(timeoutId)
+            if (err instanceof Error && err.name === "AbortError") {
+              alert("Export timed out. Please try again.")
+            } else {
+              alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+            }
+          } finally {
+            setExportingType(null)
+          }
+        }}
+        disabled={!!exportingType || !weeklyReport || !selectedDay}
+        className="w-full justify-center border-border h-12"
+      >
+        {exportingType === "daily" ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <FileText className="h-4 w-4 mr-2" />
+        )}
+        <span className="font-medium">Export Daily PDF</span>
+      </Button>
+
+      {/* Daily PDF Actions - shown when daily blob URL exists */}
+      {pdfBlobUrl && pdfType === "daily" && (
+        <Card className="p-4 bg-chart-3/10 border-chart-3/30">
+          <p className="text-sm text-chart-3 font-semibold mb-3">Daily Field Report Ready!</p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => window.open(pdfBlobUrl, "_blank")}
+              className="w-full bg-chart-3 hover:bg-chart-3/90 text-primary-foreground"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Open PDF
+            </Button>
+            
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const a = document.createElement("a")
+                  a.href = pdfBlobUrl
+                  a.download = `Daily_Field_Report_${selectedDay?.date || "export"}.pdf`
+                  a.click()
+                }}
+                className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Download
+              </Button>
+              
+              {typeof navigator !== "undefined" && navigator.share && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(pdfBlobUrl)
+                      const blob = await response.blob()
+                      const file = new File([blob], `Daily_Field_Report_${selectedDay?.date || "export"}.pdf`, { type: "application/pdf" })
+                      await navigator.share({
+                        files: [file],
+                        title: "Daily Field Report",
+                      })
+                    } catch {}
+                  }}
+                  className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+                >
+                  Share
+                </Button>
+              )}
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  window.URL.revokeObjectURL(pdfBlobUrl)
+                  setPdfBlobUrl(null)
+                  setPdfType(null)
+                }}
+                className="text-muted-foreground px-2"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </Card>
       )}
