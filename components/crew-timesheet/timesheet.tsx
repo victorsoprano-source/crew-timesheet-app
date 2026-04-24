@@ -66,7 +66,8 @@ const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Labor
 const statuses: ("Present" | "Absent" | "Late")[] = ["Present", "Absent", "Late"]
 
 // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
-const getCurrentDayIndex = () => {
+// Returns the index only - caller must verify if today is within the target week
+const getTodayIndexInWeek = () => {
   const today = new Date()
   const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
   // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
@@ -74,9 +75,45 @@ const getCurrentDayIndex = () => {
   return dayMap[dayOfWeek] ?? 0
 }
 
+// Check if today's date falls within a given week (by weekStart string YYYY-MM-DD)
+const isTodayInWeek = (weekStartStr: string): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayStr = today.toISOString().split("T")[0]
+  
+  const weekStart = new Date(weekStartStr + "T00:00:00")
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6) // Wed to Tue = 7 days
+  
+  const weekStartDate = weekStart.toISOString().split("T")[0]
+  const weekEndDate = weekEnd.toISOString().split("T")[0]
+  
+  return todayStr >= weekStartDate && todayStr <= weekEndDate
+}
+
+// Get the smart default day index for a given week
+// If today is in the week, select today. Otherwise, select Wednesday (index 0)
+const getSmartDefaultDayIndex = (weekStartStr: string): number => {
+  if (isTodayInWeek(weekStartStr)) {
+    return getTodayIndexInWeek()
+  }
+  return 0 // Default to Wednesday
+}
+
 export function Timesheet() {
   const [weekOffset, setWeekOffset] = useState(0)
-  const [selectedDayIndex, setSelectedDayIndex] = useState(getCurrentDayIndex)
+  const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
+    // On initial render, select today if it's in the current week
+    // Calculate current week's start date
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const wednesday = new Date(today)
+    const diff = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4
+    wednesday.setDate(today.getDate() - diff)
+    wednesday.setHours(0, 0, 0, 0)
+    const weekStartStr = wednesday.toISOString().split("T")[0]
+    return getSmartDefaultDayIndex(weekStartStr)
+  })
   const [entries, setEntries] = useState<TimesheetEntry[]>([])
   const [workers, setWorkers] = useState<Worker[]>([])
   const [currentTimesheet, setCurrentTimesheet] = useState<TimesheetType | null>(null)
@@ -202,7 +239,8 @@ export function Timesheet() {
 
   useEffect(() => {
     loadWeekData()
-    setSelectedDayIndex(0)
+    // When week changes, select today if it's in the new week, otherwise Wednesday
+    setSelectedDayIndex(getSmartDefaultDayIndex(weekStartStr))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
 
