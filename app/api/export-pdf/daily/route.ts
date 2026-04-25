@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
-import { createClient } from "@/lib/supabase/server"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
+
+// Force Node.js runtime for PDF generation (not Edge)
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 30 // 30 seconds max for Vercel Pro, 10s for Hobby
+
+// Create Supabase client directly in API route for better reliability
+async function createApiClient() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Ignore - API routes may not be able to set cookies
+          }
+        },
+      },
+    }
+  )
+}
 
 // Timeout wrapper
 async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
@@ -102,7 +133,7 @@ export async function GET(request: NextRequest) {
     console.log("[v0] Creating Supabase client...")
     let supabase
     try {
-      supabase = await withTimeout(createClient(), 5000, "Supabase client creation")
+      supabase = await withTimeout(createApiClient(), 5000, "Supabase client creation")
       console.log("[v0] Supabase client created successfully")
     } catch (err) {
       console.error("[v0] Supabase client creation failed:", err)
@@ -819,6 +850,9 @@ async function generateDailyPDF(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="Daily_Field_Report_${workDate}.pdf"`,
+      "Content-Length": String(pdfBytes.length),
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Pragma": "no-cache",
     },
   })
 }

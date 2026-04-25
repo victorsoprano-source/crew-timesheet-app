@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
-import { createClient } from "@/lib/supabase/server"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
+
+// Force Node.js runtime for PDF generation
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 30
+
+// Create Supabase client directly in API route
+async function createApiClient() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Ignore
+          }
+        },
+      },
+    }
+  )
+}
 
 // Timeout wrapper
 async function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
@@ -62,7 +93,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid weekStart parameter" }, { status: 400 })
     }
 
-    const supabase = await withTimeout(createClient(), 5000, "Supabase client creation")
+    const supabase = await withTimeout(createApiClient(), 5000, "Supabase client creation")
 
     // Calculate week end
     const weekStartDate = new Date(weekStart + "T12:00:00")
@@ -408,6 +439,8 @@ async function generateSummaryPDF(
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="Weekly_Summary_${weekStart}.pdf"`,
         "Content-Length": pdfBytes.length.toString(),
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
       },
     })
   } catch (error) {
