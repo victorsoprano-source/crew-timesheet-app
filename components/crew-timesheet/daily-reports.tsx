@@ -939,35 +939,56 @@ export function DailyReports() {
       <Button
         variant="outline"
         onClick={async () => {
-          if (exportingType || !weeklyReport || !selectedDay) return
+          if (exportingType || !weeklyReport || !selectedDay) {
+            console.log("[v0] Export blocked - missing data:", { 
+              exportingType, 
+              hasWeeklyReport: !!weeklyReport, 
+              hasSelectedDay: !!selectedDay 
+            })
+            return
+          }
           setExportingType("daily")
           setPdfBlobUrl(null)
           setPdfType(null)
           
           const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s for photos
+          const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout
+          
+          // Build URL - use relative path which works in both preview and production
+          const apiUrl = `/api/export-pdf/daily?workDate=${encodeURIComponent(selectedDay.date)}&weekStart=${encodeURIComponent(weeklyReport.weekStart)}`
+          console.log("[v0] Fetching PDF from:", apiUrl)
           
           try {
-            const response = await fetch(
-              `/api/export-pdf/daily?workDate=${selectedDay.date}&weekStart=${weeklyReport.weekStart}`,
-              { signal: controller.signal }
-            )
+            const response = await fetch(apiUrl, { 
+              signal: controller.signal,
+              credentials: "same-origin", // Include cookies for auth
+              cache: "no-store" // Don't cache PDF requests
+            })
             clearTimeout(timeoutId)
             
+            console.log("[v0] PDF response status:", response.status, response.statusText)
+            
             if (!response.ok) {
-              let errorMsg = "PDF generation failed"
+              let errorMsg = `PDF generation failed (${response.status})`
               try {
-                const errorData = await response.json()
-                errorMsg = errorData.error || errorMsg
-              } catch {}
+                const contentType = response.headers.get("content-type")
+                if (contentType?.includes("application/json")) {
+                  const errorData = await response.json()
+                  errorMsg = errorData.error || errorMsg
+                }
+              } catch (e) {
+                console.error("[v0] Error parsing error response:", e)
+              }
               alert(errorMsg)
               return
             }
             
             const blob = await response.blob()
+            console.log("[v0] PDF blob received, size:", blob.size, "type:", blob.type)
+            
             if (blob.size === 0) {
-              alert("Error: Empty PDF received")
+              alert("Error: Empty PDF received. Please try again.")
               return
             }
             
@@ -976,8 +997,10 @@ export function DailyReports() {
             setPdfType("daily")
             
             if (isMobile) {
+              // On mobile, open in new tab for better compatibility
               window.open(url, "_blank")
             } else {
+              // On desktop, trigger download
               const a = document.createElement("a")
               a.href = url
               a.download = `Daily_Field_Report_${selectedDay.date}.pdf`
@@ -988,8 +1011,9 @@ export function DailyReports() {
             }
           } catch (err) {
             clearTimeout(timeoutId)
+            console.error("[v0] PDF export error:", err)
             if (err instanceof Error && err.name === "AbortError") {
-              alert("Export timed out. Please try again.")
+              alert("Export timed out after 60 seconds. Please try again.")
             } else {
               alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
             }
