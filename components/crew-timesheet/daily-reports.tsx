@@ -176,48 +176,68 @@ export function DailyReports() {
   }
 
   // Upload a single file and return result
-  const uploadSingleFile = async (file: File, queueId: string): Promise<{ success: boolean; photo?: ReportPhoto; error?: string }> => {
+  const uploadSingleFile = async (file: File, queueId: string, index: number): Promise<{ success: boolean; photo?: ReportPhoto; error?: string }> => {
+    console.log('[PHOTO] Starting upload for file:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      index
+    })
+    
     if (!weeklyReport || !selectedDay) {
+      console.log('[PHOTO] ERROR: No week or day selected')
       return { success: false, error: "No week or day selected" }
     }
     
     try {
       // Ensure we have a valid File object
       if (!(file instanceof File)) {
+        console.log('[PHOTO] ERROR: Not a valid File object')
         return { success: false, error: "Invalid file format" }
+      }
+      
+      // Check file size
+      if (file.size === 0) {
+        console.log('[PHOTO] ERROR: File is empty')
+        return { success: false, error: "File is empty" }
       }
       
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('workDate', selectedDay.date) // Pass work date for path
+      formData.append('workDate', selectedDay.date)
+      formData.append('index', String(index))
 
+      console.log('[PHOTO] Sending to /api/upload...')
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       })
 
       const result = await response.json()
+      console.log('[PHOTO] API response:', { status: response.status, result })
 
       if (!response.ok) {
-        console.error("Upload API error:", result.error)
+        console.log('[PHOTO] Upload failed:', result.error)
         return { success: false, error: result.error || 'Upload failed' }
       }
 
       // Save to database
+      console.log('[PHOTO] Saving to database with pathname:', result.pathname)
       const { success, photo, error } = await addReportPhoto({
         weekStart: weeklyReport.weekStart,
         workDate: selectedDay.date,
         photoPathname: result.pathname,
       })
 
+      console.log('[PHOTO] Database result:', { success, photoId: photo?.id, error })
+
       if (success && photo) {
         return { success: true, photo }
       } else {
-        console.error("Database save error:", error)
         return { success: false, error: error || "Failed to save photo" }
       }
     } catch (err) {
-      console.error("Upload exception:", err)
+      console.log('[PHOTO] Exception during upload:', err)
       return { success: false, error: err instanceof Error ? err.message : "Upload failed" }
     }
   }
@@ -252,7 +272,7 @@ export function DailyReports() {
         item.id === queueId ? { ...item, status: "uploading" as const } : item
       ))
       
-      const result = await uploadSingleFile(file, queueId)
+      const result = await uploadSingleFile(file, queueId, i)
       
       if (result.success && result.photo) {
         successCount++

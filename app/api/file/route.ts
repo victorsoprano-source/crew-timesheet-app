@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   // Detect storage type based on pathname pattern
   const isOldVercelBlob = pathname.startsWith('timesheet-photos/')
-  const isNewSupabase = /^\d{4}-\d{2}-\d{2}\//.test(pathname) || pathname.startsWith('reports/')
+  const isNewSupabase = /^\d{4}-\d{2}-\d{2}\//.test(pathname) || pathname.startsWith('reports/') || pathname.startsWith('daily-reports/')
 
   try {
     // Try Vercel Blob first for old photos
