@@ -160,8 +160,19 @@ export function DailyReports() {
     }
   }
 
-  const getPhotoUrl = (pathname: string) => {
-    return `/api/file?pathname=${encodeURIComponent(pathname)}`
+  const getPhotoUrl = (pathname: string | null | undefined): string | null => {
+    if (!pathname) {
+      console.log("[v0] getPhotoUrl: No pathname provided")
+      return null
+    }
+    if (pathname.startsWith("http")) {
+      console.log("[v0] getPhotoUrl: Using full URL:", pathname.substring(0, 50))
+      return pathname
+    }
+    // Route through API which handles both Vercel Blob and Supabase Storage
+    const url = `/api/file?pathname=${encodeURIComponent(pathname)}`
+    console.log("[v0] getPhotoUrl: Routing through API:", { pathname })
+    return url
   }
 
   // Upload a single file and return result
@@ -1330,13 +1341,28 @@ export function DailyReports() {
                   {/* Photo Preview */}
                   <button
                     type="button"
-                    onClick={() => setPreviewImage(getPhotoUrl(photo.photo_pathname))}
-                    className="shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-border hover:opacity-90 transition-opacity"
+                    onClick={() => {
+                      const url = getPhotoUrl(photo.photo_pathname)
+                      if (url) setPreviewImage(url)
+                    }}
+                    className="shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-border hover:opacity-90 transition-opacity bg-muted/30"
                   >
                     <img
-                      src={getPhotoUrl(photo.photo_pathname)}
+                      src={getPhotoUrl(photo.photo_pathname) || ""}
                       alt={`Field entry ${index + 1}`}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.log("[v0] Photo load error:", photo.photo_pathname)
+                        const target = e.currentTarget
+                        target.style.display = "none"
+                        const parent = target.parentElement
+                        if (parent && !parent.querySelector(".photo-fallback")) {
+                          const fallback = document.createElement("div")
+                          fallback.className = "photo-fallback w-full h-full flex flex-col items-center justify-center text-muted-foreground"
+                          fallback.innerHTML = '<svg class="h-6 w-6 mb-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="text-[10px]">Unavailable</span>'
+                          parent.appendChild(fallback)
+                        }
+                      }}
                     />
                   </button>
                   

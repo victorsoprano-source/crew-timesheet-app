@@ -325,7 +325,10 @@ return { ...e, [field]: value }
     input.click()
   }
 
-  const getPhotoUrl = (pathname: string) => {
+  const getPhotoUrl = (pathname: string | null | undefined) => {
+    if (!pathname) return null
+    if (pathname.startsWith("http")) return pathname
+    // Route through API which handles both Vercel Blob and Supabase Storage
     return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
