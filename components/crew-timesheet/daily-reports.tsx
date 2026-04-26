@@ -171,8 +171,14 @@ export function DailyReports() {
     }
     
     try {
+      // Ensure we have a valid File object
+      if (!(file instanceof File)) {
+        return { success: false, error: "Invalid file format" }
+      }
+      
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('workDate', selectedDay.date) // Pass work date for path
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -182,6 +188,7 @@ export function DailyReports() {
       const result = await response.json()
 
       if (!response.ok) {
+        console.error("Upload API error:", result.error)
         return { success: false, error: result.error || 'Upload failed' }
       }
 
@@ -195,9 +202,11 @@ export function DailyReports() {
       if (success && photo) {
         return { success: true, photo }
       } else {
+        console.error("Database save error:", error)
         return { success: false, error: error || "Failed to save photo" }
       }
     } catch (err) {
+      console.error("Upload exception:", err)
       return { success: false, error: err instanceof Error ? err.message : "Upload failed" }
     }
   }
