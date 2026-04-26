@@ -1,31 +1,8 @@
-import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 /**
- * Sanitize filename for Vercel Blob storage
- * - Removes spaces and special characters
- * - Only allows: a-z, A-Z, 0-9, dash (-), underscore (_), period (.)
- */
-function sanitizeFilename(filename: string): string {
-  // Get the file extension
-  const lastDotIndex = filename.lastIndexOf('.')
-  const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex).toLowerCase() : '.jpg'
-  
-  // Sanitize the name part (everything before extension)
-  const namePart = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename
-  
-  // Replace spaces with underscores, remove special chars
-  const sanitized = namePart
-    .replace(/\s+/g, '_')           // Replace spaces with underscore
-    .replace(/[^a-zA-Z0-9_-]/g, '') // Remove special chars
-    .substring(0, 50)               // Limit length
-  
-  // If nothing left after sanitization, use generic name
-  return (sanitized || 'photo') + extension
-}
-
-/**
- * Get file extension from MIME type as fallback
+ * Get file extension from MIME type
  */
 function getExtensionFromMime(mimeType: string): string {
   const mimeToExt: Record<string, string> = {
@@ -40,6 +17,9 @@ function getExtensionFromMime(mimeType: string): string {
   return mimeToExt[mimeType] || '.jpg'
 }
 
+// Force Node.js runtime
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -47,34 +27,40 @@ export async function POST(request: NextRequest) {
     const workDate = formData.get('workDate') as string | null
 
     if (!file) {
-      console.error('UPLOAD ERROR: No file provided')
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
     // Validate that we have a proper File object
     if (!(file instanceof File)) {
-      console.error('UPLOAD ERROR: Invalid file type - not a File object')
       return NextResponse.json({ error: 'Invalid file format' }, { status: 400 })
     }
 
     // Validate file type (images only)
     if (!file.type.startsWith('image/')) {
-      console.error('UPLOAD ERROR: Not an image file, type:', file.type)
       return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 })
     }
 
-    // Validate file size (max 10MB to accommodate phone photos)
+    // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      console.error('UPLOAD ERROR: File too large:', file.size)
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 })
     }
 
+    // Create Supabase client with service role for storage access
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase environment variables')
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
     // Generate safe filename
-    // Pattern: reports/{date}/photo_{timestamp}.{ext}
     const timestamp = Date.now()
     const date = workDate || new Date().toISOString().split('T')[0]
     
-    // Get extension from original filename or MIME type
+    // Get extension from MIME type
     let extension = getExtensionFromMime(file.type)
     if (file.name) {
       const lastDot = file.name.lastIndexOf('.')
@@ -86,31 +72,38 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Create safe filename: reports/2026-04-25/photo_1714012345678.jpg
-    const safeFilename = `reports/${date}/photo_${timestamp}${extension}`
+    // Create safe path: {date}/photo_{timestamp}.jpg
+    const storagePath = `${date}/photo_${timestamp}${extension}`
 
-    console.log('Uploading file:', {
-      originalName: file.name,
-      safeFilename,
-      type: file.type,
-      size: file.size
-    })
+    // Convert File to ArrayBuffer for upload
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = new Uint8Array(arrayBuffer)
 
-    // Upload to Vercel Blob storage
-    const blob = await put(safeFilename, file, {
-      access: 'public', // Use public for easier access
-      addRandomSuffix: false, // We already have timestamp for uniqueness
-    })
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('reports')
+      .upload(storagePath, buffer, {
+        contentType: file.type,
+        upsert: false,
+      })
 
-    console.log('Upload successful:', blob.pathname)
+    if (error) {
+      console.error('Supabase storage error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    // Return the pathname for blob access
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('reports')
+      .getPublicUrl(storagePath)
+
+    // Return the pathname (for database) and public URL
     return NextResponse.json({ 
-      pathname: blob.pathname,
-      url: blob.url,
+      pathname: data.path,
+      url: urlData.publicUrl,
     })
   } catch (error) {
-    console.error('UPLOAD ERROR:', error)
+    console.error('Upload error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

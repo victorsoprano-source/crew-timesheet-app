@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { get, head } from '@vercel/blob'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,49 +9,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing pathname' }, { status: 400 })
     }
 
-    // First try to get blob metadata to check if it exists and get URL
-    const blobInfo = await head(pathname)
+    // Create Supabase client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     
-    if (!blobInfo) {
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Get public URL for the file from Supabase Storage
+    const { data } = supabase.storage
+      .from('reports')
+      .getPublicUrl(pathname)
+
+    if (!data?.publicUrl) {
       return new NextResponse('Not found', { status: 404 })
     }
 
-    // For public blobs, redirect to the blob URL
-    // This is more efficient than streaming through our server
-    return NextResponse.redirect(blobInfo.url)
+    // Redirect to the public Supabase Storage URL
+    return NextResponse.redirect(data.publicUrl)
   } catch (error) {
-    // If head() fails, try the legacy private blob approach
-    try {
-      const result = await get(pathname, {
-        access: 'private',
-        ifNoneMatch: request.headers.get('if-none-match') ?? undefined,
-      })
-
-      if (!result) {
-        return new NextResponse('Not found', { status: 404 })
-      }
-
-      // Blob hasn't changed — tell the browser to use its cached copy
-      if (result.statusCode === 304) {
-        return new NextResponse(null, {
-          status: 304,
-          headers: {
-            ETag: result.blob.etag,
-            'Cache-Control': 'private, no-cache',
-          },
-        })
-      }
-
-      return new NextResponse(result.stream, {
-        headers: {
-          'Content-Type': result.blob.contentType,
-          ETag: result.blob.etag,
-          'Cache-Control': 'private, no-cache',
-        },
-      })
-    } catch (privateError) {
-      console.error('Error serving file:', error, privateError)
-      return NextResponse.json({ error: 'Failed to serve file' }, { status: 500 })
-    }
+    console.error('Error serving file:', error)
+    return NextResponse.json({ error: 'Failed to serve file' }, { status: 500 })
   }
 }
