@@ -13,11 +13,12 @@ export interface CostCode {
 /**
  * Search cost codes by code or description
  * Returns matching codes for autocomplete
+ * Shows ALL codes plus codes specific to the jobGroup
  */
 export async function searchCostCodes(
   query: string,
   jobGroup?: string,
-  limit: number = 10
+  limit: number = 50
 ): Promise<CostCode[]> {
   const supabase = await createClient()
   
@@ -25,14 +26,8 @@ export async function searchCostCodes(
     .from("cost_codes")
     .select("*")
   
-  // Filter by job group if provided
-  if (jobGroup) {
-    queryBuilder = queryBuilder.eq("job_group", jobGroup)
-  }
-  
   // Search by code or description
   if (query.trim()) {
-    // Search in both code and description
     queryBuilder = queryBuilder.or(`code.ilike.%${query}%,description.ilike.%${query}%`)
   }
   

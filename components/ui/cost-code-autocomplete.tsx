@@ -87,7 +87,8 @@ export function CostCodeAutocomplete({
   }
 
   const handleSelectCode = (costCode: CostCode) => {
-    const formatted = `${costCode.code} - ${costCode.description}`
+    // Format: "120-001 - Install Cables & Terminations (C-34921/34925)"
+    const formatted = `${costCode.code} - ${costCode.description} (${costCode.job_group})`
     setInputValue(formatted)
     onChange(formatted)
     setShowDropdown(false)
@@ -144,18 +145,20 @@ export function CostCodeAutocomplete({
     return acc
   }, {} as Record<string, CostCode[]>)
 
-  // Division labels
+  // Division labels for C-34921R cost codes
   const divisionLabels: Record<string, string> = {
-    "100": "Electrical",
-    "110": "Lighting",
-    "120": "Low Voltage",
-    "130": "HVAC",
-    "140": "Plumbing",
-    "200": "Painting",
-    "300": "Carpentry",
-    "400": "Site Work",
-    "500": "General/Admin",
-    "600": "Specialty",
+    "001": "Admin/Personnel",
+    "002": "Yard/Mobilization",
+    "011": "Mock Up",
+    "013": "Rigging",
+    "020": "General Work",
+    "021": "Supervision",
+    "030": "C-33600 Paint",
+    "051": "C-33600 Steel Support",
+    "052": "C-34921 Steel Support",
+    "053": "C-34925 Steel Support",
+    "120": "C-34921/34925 Work",
+    "130": "C-34921/34925 Paint",
   }
 
   return (
@@ -215,9 +218,20 @@ export function CostCodeAutocomplete({
                         }}
                         onMouseEnter={() => setHighlightedIndex(globalIndex)}
                       >
-                        <span className="font-mono font-medium">{code.code}</span>
-                        <span className="mx-2 text-muted-foreground">-</span>
-                        <span>{code.description}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center min-w-0">
+                            <span className="font-mono font-medium shrink-0">{code.code}</span>
+                            <span className="mx-1.5 text-muted-foreground shrink-0">-</span>
+                            <span className="truncate">{code.description}</span>
+                          </div>
+                          <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded ${
+                            globalIndex === highlightedIndex 
+                              ? "bg-primary-foreground/20 text-primary-foreground" 
+                              : "bg-muted text-muted-foreground"
+                          }`}>
+                            {code.job_group}
+                          </span>
+                        </div>
                       </button>
                     )
                   })}

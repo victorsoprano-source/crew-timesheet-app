@@ -622,8 +622,7 @@ return { ...e, [field]: value }
                   <CostCodeAutocomplete
                     value={entry.jobCode}
                     onChange={(value) => updateEntry(entry.id, "jobCode", value)}
-                    jobGroup="C-34921"
-                    placeholder="Search code..."
+                    placeholder="Search cost code..."
                     className="bg-input border-border text-foreground placeholder:text-muted-foreground h-9 text-sm"
                   />
                 </div>
