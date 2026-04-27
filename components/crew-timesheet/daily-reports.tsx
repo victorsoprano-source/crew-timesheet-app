@@ -161,75 +161,61 @@ export function DailyReports() {
   }
 
   const getPhotoUrl = (pathname: string | null | undefined): string | null => {
-    if (!pathname) {
-      console.log("[v0] getPhotoUrl: No pathname provided")
-      return null
-    }
-    if (pathname.startsWith("http")) {
-      console.log("[v0] getPhotoUrl: Using full URL:", pathname.substring(0, 50))
-      return pathname
-    }
+    if (!pathname) return null
+    if (pathname.startsWith("http")) return pathname
     // Route through API which handles both Vercel Blob and Supabase Storage
-    const url = `/api/file?pathname=${encodeURIComponent(pathname)}`
-    console.log("[v0] getPhotoUrl: Routing through API:", { pathname })
-    return url
+    return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
   // Upload a single file and return result
   const uploadSingleFile = async (file: File, queueId: string, index: number): Promise<{ success: boolean; photo?: ReportPhoto; error?: string }> => {
-    console.log('[PHOTO] Starting upload for file:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      index
-    })
-    
     if (!weeklyReport || !selectedDay) {
-      console.log('[PHOTO] ERROR: No week or day selected')
       return { success: false, error: "No week or day selected" }
     }
     
     try {
       // Ensure we have a valid File object
       if (!(file instanceof File)) {
-        console.log('[PHOTO] ERROR: Not a valid File object')
         return { success: false, error: "Invalid file format" }
       }
       
       // Check file size
       if (file.size === 0) {
-        console.log('[PHOTO] ERROR: File is empty')
         return { success: false, error: "File is empty" }
       }
       
+      // Import and use image conversion utility
+      const { prepareImageForUpload } = await import("@/lib/image-utils")
+      
+      // Convert image to JPEG (strips EXIF, normalizes format)
+      const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, index)
+      
+      if (conversionError || !processedFile) {
+        return { success: false, error: conversionError || "Failed to process image" }
+      }
+      
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', processedFile)
       formData.append('workDate', selectedDay.date)
       formData.append('index', String(index))
 
-      console.log('[PHOTO] Sending to /api/upload...')
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       })
 
       const result = await response.json()
-      console.log('[PHOTO] API response:', { status: response.status, result })
 
       if (!response.ok) {
-        console.log('[PHOTO] Upload failed:', result.error)
         return { success: false, error: result.error || 'Upload failed' }
       }
 
       // Save to database
-      console.log('[PHOTO] Saving to database with pathname:', result.pathname)
       const { success, photo, error } = await addReportPhoto({
         weekStart: weeklyReport.weekStart,
         workDate: selectedDay.date,
         photoPathname: result.pathname,
       })
-
-      console.log('[PHOTO] Database result:', { success, photoId: photo?.id, error })
 
       if (success && photo) {
         return { success: true, photo }
@@ -237,7 +223,6 @@ export function DailyReports() {
         return { success: false, error: error || "Failed to save photo" }
       }
     } catch (err) {
-      console.log('[PHOTO] Exception during upload:', err)
       return { success: false, error: err instanceof Error ? err.message : "Upload failed" }
     }
   }

@@ -140,18 +140,10 @@ export function CrewList({ onNavigate }: CrewListProps) {
   }
 
   const getPhotoUrl = (pathname: string | null) => {
-    if (!pathname) {
-      console.log("[v0] getPhotoUrl: No pathname provided")
-      return null
-    }
-    if (pathname.startsWith("http")) {
-      console.log("[v0] getPhotoUrl: Using full URL:", pathname.substring(0, 50))
-      return pathname
-    }
+    if (!pathname) return null
+    if (pathname.startsWith("http")) return pathname
     // Use the /api/file endpoint which handles both Vercel Blob and Supabase Storage
-    const url = `/api/file?pathname=${encodeURIComponent(pathname)}`
-    console.log("[v0] getPhotoUrl: Routing through API:", { pathname, url })
-    return url
+    return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
   const handleEditPhotoUpload = async (file: File) => {
