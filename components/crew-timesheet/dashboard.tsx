@@ -134,21 +134,30 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
           </Card>
         ))}
         
-        {/* ST/OT/DT Card - Custom 3-column layout */}
-        <Card className="flex flex-col items-center gap-2 p-4 bg-card border-border relative">
-          <FileText className="h-5 w-5 text-chart-3" />
-          <div className="grid grid-cols-3 gap-3 w-full text-center">
-            <div className="flex flex-col items-center">
-              <span className="text-lg font-bold text-foreground">{stats.totalST}</span>
-              <span className="text-[10px] text-muted-foreground">ST</span>
+        {/* Hours Breakdown Card - ST/OT/DT */}
+        <Card className="flex flex-col p-4 bg-card border-border relative">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-4 w-4 text-chart-3" />
+            <span className="text-xs font-medium text-muted-foreground">Hours Breakdown</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {/* Straight Time */}
+            <div className="flex flex-col items-center justify-center bg-muted/30 rounded-lg py-2 px-1">
+              <span className="text-base sm:text-lg font-bold text-foreground tabular-nums">{stats.totalST}</span>
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mt-0.5">ST</span>
+              <span className="text-[8px] text-muted-foreground/70 hidden sm:block">Straight</span>
             </div>
-            <div className="flex flex-col items-center">
-              <span className="text-lg font-bold text-foreground">{stats.totalOT}</span>
-              <span className="text-[10px] text-muted-foreground">OT</span>
+            {/* Overtime */}
+            <div className="flex flex-col items-center justify-center bg-muted/30 rounded-lg py-2 px-1">
+              <span className="text-base sm:text-lg font-bold text-chart-2 tabular-nums">{stats.totalOT}</span>
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mt-0.5">OT</span>
+              <span className="text-[8px] text-muted-foreground/70 hidden sm:block">Overtime</span>
             </div>
-            <div className="flex flex-col items-center">
-              <span className="text-lg font-bold text-foreground">{stats.totalDT}</span>
-              <span className="text-[10px] text-muted-foreground">DT</span>
+            {/* Double Time */}
+            <div className="flex flex-col items-center justify-center bg-muted/30 rounded-lg py-2 px-1">
+              <span className="text-base sm:text-lg font-bold text-chart-3 tabular-nums">{stats.totalDT}</span>
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mt-0.5">DT</span>
+              <span className="text-[8px] text-muted-foreground/70 hidden sm:block">Double</span>
             </div>
           </div>
           {isLoading && (
