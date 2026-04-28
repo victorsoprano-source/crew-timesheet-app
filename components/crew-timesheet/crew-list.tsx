@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Phone, Award, User, Loader2, RefreshCw, Pencil, Trash2, X, Wrench, FileCheck, Camera, Images, Eye, Plus, Calendar } from "lucide-react"
+import { Search, Phone, Award, User, Loader2, RefreshCw, Pencil, Trash2, X, Wrench, FileCheck, Camera, Images, Eye, Plus, Calendar, ImageOff } from "lucide-react"
+import { CertificateGallery, type CertificatePhoto } from "@/components/ui/certificate-gallery"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,7 +83,11 @@ export function CrewList({ onNavigate }: CrewListProps) {
   const [isUploadingCertPhoto, setIsUploadingCertPhoto] = useState(false)
   const [isSavingCert, setIsSavingCert] = useState(false)
   const [editingCertId, setEditingCertId] = useState<string | null>(null)
-  const [certPhotoPreview, setCertPhotoPreview] = useState<string | null>(null)
+  const [galleryData, setGalleryData] = useState<{
+    photos: CertificatePhoto[]
+    initialPhotoId: string
+    workerName: string
+  } | null>(null)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -826,17 +831,25 @@ export function CrewList({ onNavigate }: CrewListProps) {
                     {editWorkerCerts.map((cert) => (
                       <div key={cert.id} className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg">
                         {cert.photo_pathname ? (
-                          <button
-                            type="button"
-                            onClick={() => setCertPhotoPreview(`/api/file?pathname=${encodeURIComponent(cert.photo_pathname!)}`)}
-                            className="h-12 w-12 rounded-lg overflow-hidden ring-1 ring-border hover:ring-primary/50 transition-all flex-shrink-0"
-                          >
-                            <img
-                              src={`/api/file?pathname=${encodeURIComponent(cert.photo_pathname)}`}
-                              alt={cert.certification_type}
-                              className="h-full w-full object-cover"
-                            />
-                          </button>
+                          <CertThumbnail
+                            cert={cert}
+                            onClick={() => {
+                              const photoCerts = editWorkerCerts.filter(c => c.photo_pathname)
+                              if (photoCerts.length > 0) {
+                                setGalleryData({
+                                  photos: photoCerts.map(c => ({
+                                    id: c.id,
+                                    certification_type: c.certification_type,
+                                    photo_pathname: c.photo_pathname!,
+                                    expiration_date: c.expiration_date,
+                                    issue_date: c.issue_date,
+                                  })),
+                                  initialPhotoId: cert.id,
+                                  workerName: editWorker?.name || "",
+                                })
+                              }
+                            }}
+                          />
                         ) : (
                           <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                             <FileCheck className="h-5 w-5 text-muted-foreground" />
@@ -1153,17 +1166,25 @@ export function CrewList({ onNavigate }: CrewListProps) {
                     {viewWorkerCerts.map((cert) => (
                       <div key={cert.id} className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg">
                         {cert.photo_pathname ? (
-                          <button
-                            type="button"
-                            onClick={() => setCertPhotoPreview(`/api/file?pathname=${encodeURIComponent(cert.photo_pathname!)}`)}
-                            className="h-12 w-12 rounded-lg overflow-hidden ring-1 ring-border hover:ring-primary/50 transition-all flex-shrink-0"
-                          >
-                            <img
-                              src={`/api/file?pathname=${encodeURIComponent(cert.photo_pathname)}`}
-                              alt={cert.certification_type}
-                              className="h-full w-full object-cover"
-                            />
-                          </button>
+                          <CertThumbnail
+                            cert={cert}
+                            onClick={() => {
+                              const photoCerts = viewWorkerCerts.filter(c => c.photo_pathname)
+                              if (photoCerts.length > 0) {
+                                setGalleryData({
+                                  photos: photoCerts.map(c => ({
+                                    id: c.id,
+                                    certification_type: c.certification_type,
+                                    photo_pathname: c.photo_pathname!,
+                                    expiration_date: c.expiration_date,
+                                    issue_date: c.issue_date,
+                                  })),
+                                  initialPhotoId: cert.id,
+                                  workerName: viewingWorker?.name || "",
+                                })
+                              }
+                            }}
+                          />
                         ) : (
                           <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                             <FileCheck className="h-5 w-5 text-muted-foreground" />
@@ -1215,29 +1236,14 @@ export function CrewList({ onNavigate }: CrewListProps) {
         </div>
       )}
 
-      {/* Cert Photo Preview Modal */}
-      {certPhotoPreview && (
-        <div 
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setCertPhotoPreview(null)}
-        >
-          <div className="relative max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setCertPhotoPreview(null)}
-              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white transition-colors"
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <div className="bg-card rounded-xl overflow-hidden border border-border shadow-2xl">
-              <img
-                src={certPhotoPreview}
-                alt="Certificate"
-                className="w-full h-auto"
-              />
-            </div>
-          </div>
-        </div>
+      {/* Certificate Gallery Slideshow */}
+      {galleryData && (
+        <CertificateGallery
+          photos={galleryData.photos}
+          initialPhotoId={galleryData.initialPhotoId}
+          workerName={galleryData.workerName}
+          onClose={() => setGalleryData(null)}
+        />
       )}
 
       {/* Photo Preview Modal */}
@@ -1270,5 +1276,47 @@ export function CrewList({ onNavigate }: CrewListProps) {
         </div>
       )}
     </div>
+  )
+}
+
+// Thumbnail component with error handling for certificate photos
+function CertThumbnail({ 
+  cert, 
+  onClick 
+}: { 
+  cert: WorkerCertification
+  onClick: () => void
+}) {
+  const [error, setError] = useState(false)
+  
+  const photoUrl = cert.photo_pathname?.startsWith("http")
+    ? cert.photo_pathname
+    : `/api/file?pathname=${encodeURIComponent(cert.photo_pathname || "")}`
+  
+  if (error) {
+    return (
+      <div 
+        className="h-12 w-12 rounded-lg bg-muted/50 flex flex-col items-center justify-center flex-shrink-0 cursor-pointer hover:bg-muted transition-colors"
+        onClick={onClick}
+      >
+        <ImageOff className="h-4 w-4 text-muted-foreground/70" />
+        <span className="text-[8px] text-muted-foreground/50 mt-0.5">N/A</span>
+      </div>
+    )
+  }
+  
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-12 w-12 rounded-lg overflow-hidden ring-1 ring-border hover:ring-primary/50 transition-all flex-shrink-0"
+    >
+      <img
+        src={photoUrl}
+        alt={cert.certification_type}
+        className="h-full w-full object-cover"
+        onError={() => setError(true)}
+      />
+    </button>
   )
 }
