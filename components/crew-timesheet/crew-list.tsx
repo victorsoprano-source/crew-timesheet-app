@@ -81,13 +81,6 @@ export function CrewList({ onNavigate }: CrewListProps) {
     photoPreviewUrl: "",
   })
   const [isUploadingCertPhoto, setIsUploadingCertPhoto] = useState(false)
-  const [isAnalyzingCert, setIsAnalyzingCert] = useState(false)
-  const [detectedCertData, setDetectedCertData] = useState<{
-    certificateName: string | null
-    issueDate: string | null
-    expirationDate: string | null
-    confidence: 'high' | 'medium' | 'low'
-  } | null>(null)
   const [isSavingCert, setIsSavingCert] = useState(false)
   const [editingCertId, setEditingCertId] = useState<string | null>(null)
   const [galleryData, setGalleryData] = useState<{
@@ -219,6 +212,8 @@ export function CrewList({ onNavigate }: CrewListProps) {
 
   // Certification photo upload handlers
   const handleCertPhotoUpload = async (file: File) => {
+    console.log("[v0] handleCertPhotoUpload called:", { fileName: file.name, fileType: file.type, fileSize: file.size })
+    
     setIsUploadingCertPhoto(true)
     setDetectedCertData(null)
     
@@ -228,24 +223,34 @@ export function CrewList({ onNavigate }: CrewListProps) {
       const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, 0)
       
       if (conversionError || !processedFile) {
+        console.log("[v0] Image conversion failed:", conversionError)
         throw new Error(conversionError || 'Failed to process image')
       }
       
+      console.log("[v0] Image converted:", { processedSize: processedFile.size, processedType: processedFile.type })
+      
       const formDataUpload = new FormData()
       formDataUpload.append('file', processedFile)
+      formDataUpload.append('workerId', editingWorker?.id || 'unknown')
+      formDataUpload.append('certType', newCertForm.certificationType || 'certificate')
 
-      const response = await fetch('/api/upload', {
+      console.log("[v0] Uploading to /api/upload-certificate...")
+      
+      const response = await fetch('/api/upload-certificate', {
         method: 'POST',
         body: formDataUpload,
       })
 
       const result = await response.json()
+      console.log("[v0] Upload response:", result)
 
       if (!response.ok) {
+        console.log("[v0] Upload failed:", result.error)
         throw new Error(result.error || 'Upload failed')
       }
 
       const photoPreviewUrl = `/api/file?pathname=${encodeURIComponent(result.pathname)}`
+      console.log("[v0] Photo preview URL:", photoPreviewUrl)
       
       setNewCertForm(prev => ({
         ...prev,
@@ -254,58 +259,17 @@ export function CrewList({ onNavigate }: CrewListProps) {
       }))
       
       setIsUploadingCertPhoto(false)
+      console.log("[v0] Upload complete, photo saved to form state")
       
-      // Now analyze the certificate photo for date detection
-      setIsAnalyzingCert(true)
-      
-      try {
-        const analyzeResponse = await fetch('/api/analyze-certificate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: photoPreviewUrl }),
-        })
-        
-        const analyzeResult = await analyzeResponse.json()
-        
-        if (analyzeResult.success && analyzeResult.data) {
-          const { certificateName, issueDate, expirationDate, confidence } = analyzeResult.data
-          
-          // Only show detection dialog if we found useful data
-          if (expirationDate || issueDate || certificateName) {
-            setDetectedCertData({
-              certificateName,
-              issueDate,
-              expirationDate,
-              confidence,
-            })
-          }
-        }
-      } catch (analyzeErr) {
-        console.error("Certificate analysis error:", analyzeErr)
-        // Don't fail the upload if analysis fails - user can enter manually
-      } finally {
-        setIsAnalyzingCert(false)
-      }
+      // Skip analysis for now to ensure basic upload works
+      // Users can enter dates manually
       
     } catch (err) {
-      console.error("Cert photo upload error:", err)
+      console.log("[v0] Cert photo upload error:", err)
       setIsUploadingCertPhoto(false)
     }
   }
   
-  // Apply detected certificate data
-  const applyDetectedData = (apply: boolean) => {
-    if (apply && detectedCertData) {
-      setNewCertForm(prev => ({
-        ...prev,
-        certificationType: detectedCertData.certificateName || prev.certificationType,
-        issueDate: detectedCertData.issueDate || prev.issueDate,
-        expirationDate: detectedCertData.expirationDate || prev.expirationDate,
-      }))
-    }
-    setDetectedCertData(null)
-  }
-
   const handleCertPhotoSelect = (useCamera: boolean = false) => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -332,21 +296,44 @@ export function CrewList({ onNavigate }: CrewListProps) {
 
   // Add certification handler
   const handleAddCertification = async () => {
-    if (!editingWorker || !newCertForm.certificationType || !newCertForm.expirationDate) return
+    console.log("[v0] handleAddCertification called")
+    console.log("[v0] editingWorker:", editingWorker?.id, editingWorker?.name)
+    console.log("[v0] newCertForm:", newCertForm)
+    
+    if (!editingWorker) {
+      console.log("[v0] ERROR: No editingWorker selected")
+      return
+    }
+    if (!newCertForm.certificationType) {
+      console.log("[v0] ERROR: No certification type selected")
+      return
+    }
+    if (!newCertForm.expirationDate) {
+      console.log("[v0] ERROR: No expiration date set")
+      return
+    }
     
     setIsSavingCert(true)
+    
+    const certData = {
+      workerId: editingWorker.id,
+      certificationType: newCertForm.certificationType,
+      photoPathname: newCertForm.photoPathname || undefined,
+      issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
+      expirationDate: newCertForm.expirationDate,
+    }
+    
+    console.log("[v0] Saving certification with data:", certData)
+    
     try {
-      const result = await addWorkerCertification({
-        workerId: editingWorker.id,
-        certificationType: newCertForm.certificationType,
-        photoPathname: newCertForm.photoPathname || undefined,
-        issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
-        expirationDate: newCertForm.expirationDate,
-      })
+      const result = await addWorkerCertification(certData)
+      console.log("[v0] addWorkerCertification result:", result)
       
       if (result.success) {
+        console.log("[v0] Certification saved successfully, refreshing list...")
         // Refresh certifications list
         const certs = await getWorkerCertifications(editingWorker.id)
+        console.log("[v0] Refreshed certs:", certs.length)
         setEditWorkerCerts(certs)
         // Reset form
         setNewCertForm({
@@ -357,9 +344,12 @@ export function CrewList({ onNavigate }: CrewListProps) {
           photoPreviewUrl: "",
         })
         setShowAddCertForm(false)
+        console.log("[v0] Form reset, UI should update")
+      } else {
+        console.log("[v0] Save failed:", result.error)
       }
     } catch (err) {
-      console.error("Error adding certification:", err)
+      console.log("[v0] Exception in handleAddCertification:", err)
     } finally {
       setIsSavingCert(false)
     }
@@ -910,7 +900,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
                                     issue_date: c.issue_date,
                                   })),
                                   initialPhotoId: cert.id,
-                                  workerName: editWorker?.name || "",
+                                  workerName: editingWorker?.name || "",
                                 })
                               }
                             }}
@@ -1048,62 +1038,8 @@ export function CrewList({ onNavigate }: CrewListProps) {
                             </Button>
                           </div>
                         )}
-                        {/* Analysis indicator */}
-                        {isAnalyzingCert && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            <span>Detecting dates...</span>
-                          </div>
-                        )}
-                      </div>
+                        </div>
                     </div>
-                    
-                    {/* Detected Data Confirmation */}
-                    {detectedCertData && (
-                      <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg">
-                        <div className="flex items-start gap-2 mb-2">
-                          <Award className="h-4 w-4 text-primary mt-0.5" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">
-                              Certificate Data Detected
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Confidence: {detectedCertData.confidence}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1 text-xs mb-3 ml-6">
-                          {detectedCertData.certificateName && (
-                            <p><span className="text-muted-foreground">Type:</span> {detectedCertData.certificateName}</p>
-                          )}
-                          {detectedCertData.issueDate && (
-                            <p><span className="text-muted-foreground">Issue:</span> {new Date(detectedCertData.issueDate).toLocaleDateString()}</p>
-                          )}
-                          {detectedCertData.expirationDate && (
-                            <p><span className="text-muted-foreground">Expires:</span> {new Date(detectedCertData.expirationDate).toLocaleDateString()}</p>
-                          )}
-                        </div>
-                        <div className="flex gap-2 ml-6">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => applyDetectedData(true)}
-                            className="h-8"
-                          >
-                            Use Detected Data
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => applyDetectedData(false)}
-                            className="h-8 border-border"
-                          >
-                            Enter Manually
-                          </Button>
-                        </div>
-                      </div>
-                    )}
 
                     <div className="flex gap-2 pt-2">
                       <Button
