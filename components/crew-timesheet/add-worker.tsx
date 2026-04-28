@@ -8,25 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { UserPlus, User, Wrench, Phone, Award, Loader2, CheckCircle, Plus, Camera, Images, Trash2, Calendar, X, FileCheck } from "lucide-react"
 import { createWorker, type CertificationInput, type WorkerLevel } from "@/app/actions/workers"
+import { getCertificationNames, getCertificationShortLabel } from "@/lib/certification-types"
 
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Heavy Equipment Operator", "HVAC Technician", "Painter"]
 
 const workerLevels: WorkerLevel[] = ["Journeyman", "Apprentice Year 1", "Apprentice Year 2", "Apprentice Year 3"]
 
-const certificationTypes = [
-  "OSHA 10",
-  "OSHA 30",
-  "First Aid/CPR",
-  "Forklift Certified",
-  "Crane Operator",
-  "Confined Space",
-  "Fall Protection",
-  "Scaffold Certified",
-  "CDL License",
-  "Electrical License",
-  "Plumbing License",
-  "Other",
-]
+const certificationTypes = getCertificationNames()
 
 interface PendingCertification extends CertificationInput {
   id: string

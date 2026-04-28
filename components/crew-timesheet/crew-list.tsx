@@ -20,21 +20,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { getWorkers, getWorkerStats, updateWorkerStatus, updateWorker, deleteWorker, getWorkerCertifications, addWorkerCertification, updateWorkerCertification, deleteWorkerCertification, type Worker, type WorkerLevel, type WorkerCertification } from "@/app/actions/workers"
+import { getCertificationNames, getCertificationShortLabel, getCertificationStatus, getStatusBadgeClass, getStatusLabel } from "@/lib/certification-types"
 
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Heavy Equipment Operator", "HVAC Technician", "Painter"]
 
 const workerLevels: WorkerLevel[] = ["Journeyman", "Apprentice Year 1", "Apprentice Year 2", "Apprentice Year 3"]
 
-const certifications = [
-  "OSHA 10",
-  "OSHA 30",
-  "First Aid/CPR",
-  "Forklift Certified",
-  "Crane Operator",
-  "Confined Space",
-  "Fall Protection",
-  "Scaffold Certified",
-]
+const certifications = getCertificationNames()
 
 interface CrewListProps {
   onNavigate?: (screen: string) => void
@@ -851,11 +843,18 @@ export function CrewList({ onNavigate }: CrewListProps) {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{cert.certification_type}</p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Expires: {new Date(cert.expiration_date).toLocaleDateString()}
+                          <p className="text-sm font-medium text-foreground truncate" title={cert.certification_type}>
+                            {getCertificationShortLabel(cert.certification_type)}
                           </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(cert.expiration_date).toLocaleDateString()}
+                            </p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getStatusBadgeClass(getCertificationStatus(cert.expiration_date))}`}>
+                              {getStatusLabel(getCertificationStatus(cert.expiration_date))}
+                            </span>
+                          </div>
                         </div>
                         <Button
                           type="button"
@@ -1171,11 +1170,18 @@ export function CrewList({ onNavigate }: CrewListProps) {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{cert.certification_type}</p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Expires: {new Date(cert.expiration_date).toLocaleDateString()}
+                          <p className="text-sm font-medium text-foreground truncate" title={cert.certification_type}>
+                            {getCertificationShortLabel(cert.certification_type)}
                           </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(cert.expiration_date).toLocaleDateString()}
+                            </p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getStatusBadgeClass(getCertificationStatus(cert.expiration_date))}`}>
+                              {getStatusLabel(getCertificationStatus(cert.expiration_date))}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}

@@ -42,23 +42,16 @@ import {
   type Worker,
   type WorkerCertification
 } from "@/app/actions/workers"
+import {
+  getCertificationNames,
+  getCertificationShortLabel,
+  getCertificationStatus,
+  getStatusBadgeClass,
+  getStatusLabel,
+  type CertificationStatus
+} from "@/lib/certification-types"
 
-const certificationTypes = [
-  "OSHA 10",
-  "OSHA 30",
-  "First Aid/CPR",
-  "Forklift Certified",
-  "Crane Operator",
-  "Confined Space",
-  "Fall Protection",
-  "Scaffold Certified",
-  "Electrical License",
-  "Plumbing License",
-  "HVAC Certification",
-  "Welding Certification",
-  "CDL",
-  "Other",
-]
+const certificationTypes = getCertificationNames()
 
 export function Certifications() {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -355,13 +348,17 @@ export function Certifications() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="font-medium text-foreground truncate">{cert.certification_type}</h3>
+                        <h3 className="font-medium text-foreground truncate" title={cert.certification_type}>
+                          {getCertificationShortLabel(cert.certification_type)}
+                        </h3>
                         <p className="text-sm text-muted-foreground flex items-center gap-1">
                           <User className="h-3 w-3" />
                           {cert.worker_name}
                         </p>
                       </div>
-                      <Badge className={expStatus.color}>{expStatus.label}</Badge>
+                      <span className={`text-xs px-2 py-1 rounded border ${getStatusBadgeClass(getCertificationStatus(cert.expiration_date))}`}>
+                        {getStatusLabel(getCertificationStatus(cert.expiration_date))}
+                      </span>
                     </div>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
