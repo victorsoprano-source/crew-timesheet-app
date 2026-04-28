@@ -289,32 +289,25 @@ export async function addWorkerCertification(data: {
   issueDate: string
   expirationDate: string
 }): Promise<{ success: boolean; certification?: WorkerCertification; error?: string }> {
-  console.log("[SERVER] addWorkerCertification called with:", data)
-  
   const supabase = await createClient()
-
-  const insertData = {
-    worker_id: data.workerId,
-    certification_type: data.certificationType,
-    photo_pathname: data.photoPathname || null,
-    issue_date: data.issueDate,
-    expiration_date: data.expirationDate,
-  }
-  
-  console.log("[SERVER] Inserting into worker_certifications:", insertData)
 
   const { data: cert, error } = await supabase
     .from("worker_certifications")
-    .insert(insertData)
+    .insert({
+      worker_id: data.workerId,
+      certification_type: data.certificationType,
+      photo_pathname: data.photoPathname || null,
+      issue_date: data.issueDate,
+      expiration_date: data.expirationDate,
+    })
     .select()
     .single()
 
   if (error) {
-    console.log("[SERVER] Error adding certification:", error.message, error.details)
+    console.error("Error adding certification:", error)
     return { success: false, error: error.message }
   }
 
-  console.log("[SERVER] Certification saved successfully:", cert?.id)
   revalidatePath("/")
   return { success: true, certification: cert }
 }

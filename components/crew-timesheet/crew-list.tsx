@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { getWorkers, getWorkerStats, updateWorkerStatus, updateWorker, deleteWorker, getWorkerCertifications, addWorkerCertification, updateWorkerCertification, deleteWorkerCertification, type Worker, type WorkerLevel, type WorkerCertification } from "@/app/actions/workers"
 import { getCertificationNames, getCertificationShortLabel, getCertificationStatus, getStatusBadgeClass, getStatusLabel } from "@/lib/certification-types"
+import { toast } from "sonner"
 
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Heavy Equipment Operator", "HVAC Technician", "Painter"]
 
@@ -212,28 +213,21 @@ export function CrewList({ onNavigate }: CrewListProps) {
 
   // Certification photo upload handlers
   const handleCertPhotoUpload = async (file: File) => {
-    console.log("[v0] handleCertPhotoUpload called:", { fileName: file.name, fileType: file.type, fileSize: file.size })
-    
     setIsUploadingCertPhoto(true)
     
     try {
-      // First, convert to JPEG using the image utils
+      // Convert to JPEG using the image utils
       const { prepareImageForUpload } = await import("@/lib/image-utils")
       const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, 0)
       
       if (conversionError || !processedFile) {
-        console.log("[v0] Image conversion failed:", conversionError)
         throw new Error(conversionError || 'Failed to process image')
       }
-      
-      console.log("[v0] Image converted:", { processedSize: processedFile.size, processedType: processedFile.type })
       
       const formDataUpload = new FormData()
       formDataUpload.append('file', processedFile)
       formDataUpload.append('workerId', editingWorker?.id || 'unknown')
       formDataUpload.append('certType', newCertForm.certificationType || 'certificate')
-
-      console.log("[v0] Uploading to /api/upload-certificate...")
       
       const response = await fetch('/api/upload-certificate', {
         method: 'POST',
@@ -241,30 +235,25 @@ export function CrewList({ onNavigate }: CrewListProps) {
       })
 
       const result = await response.json()
-      console.log("[v0] Upload response:", result)
 
       if (!response.ok) {
-        console.log("[v0] Upload failed:", result.error)
         throw new Error(result.error || 'Upload failed')
       }
 
+      // Update form with uploaded photo
       const photoPreviewUrl = `/api/file?pathname=${encodeURIComponent(result.pathname)}`
-      console.log("[v0] Photo preview URL:", photoPreviewUrl)
-      
       setNewCertForm(prev => ({
         ...prev,
         photoPathname: result.pathname,
-        photoPreviewUrl,
+        photoPreviewUrl: photoPreviewUrl,
       }))
       
-      setIsUploadingCertPhoto(false)
-      console.log("[v0] Upload complete, photo saved to form state")
-      
-      // Skip analysis for now to ensure basic upload works
-      // Users can enter dates manually
+      toast.success("Photo uploaded successfully")
       
     } catch (err) {
-      console.log("[v0] Cert photo upload error:", err)
+      const errorMsg = err instanceof Error ? err.message : 'Upload failed'
+      toast.error(`Photo upload failed: ${errorMsg}`)
+    } finally {
       setIsUploadingCertPhoto(false)
     }
   }
@@ -295,44 +284,33 @@ export function CrewList({ onNavigate }: CrewListProps) {
 
   // Add certification handler
   const handleAddCertification = async () => {
-    console.log("[v0] handleAddCertification called")
-    console.log("[v0] editingWorker:", editingWorker?.id, editingWorker?.name)
-    console.log("[v0] newCertForm:", newCertForm)
-    
     if (!editingWorker) {
-      console.log("[v0] ERROR: No editingWorker selected")
+      toast.error("No worker selected")
       return
     }
     if (!newCertForm.certificationType) {
-      console.log("[v0] ERROR: No certification type selected")
+      toast.error("Please select a certification type")
       return
     }
     if (!newCertForm.expirationDate) {
-      console.log("[v0] ERROR: No expiration date set")
+      toast.error("Please set an expiration date")
       return
     }
     
     setIsSavingCert(true)
     
-    const certData = {
-      workerId: editingWorker.id,
-      certificationType: newCertForm.certificationType,
-      photoPathname: newCertForm.photoPathname || undefined,
-      issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
-      expirationDate: newCertForm.expirationDate,
-    }
-    
-    console.log("[v0] Saving certification with data:", certData)
-    
     try {
-      const result = await addWorkerCertification(certData)
-      console.log("[v0] addWorkerCertification result:", result)
+      const result = await addWorkerCertification({
+        workerId: editingWorker.id,
+        certificationType: newCertForm.certificationType,
+        photoPathname: newCertForm.photoPathname || undefined,
+        issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
+        expirationDate: newCertForm.expirationDate,
+      })
       
       if (result.success) {
-        console.log("[v0] Certification saved successfully, refreshing list...")
         // Refresh certifications list
         const certs = await getWorkerCertifications(editingWorker.id)
-        console.log("[v0] Refreshed certs:", certs.length)
         setEditWorkerCerts(certs)
         // Reset form
         setNewCertForm({
@@ -343,12 +321,13 @@ export function CrewList({ onNavigate }: CrewListProps) {
           photoPreviewUrl: "",
         })
         setShowAddCertForm(false)
-        console.log("[v0] Form reset, UI should update")
+        toast.success("Certification saved successfully")
       } else {
-        console.log("[v0] Save failed:", result.error)
+        toast.error(result.error || "Failed to save certification")
       }
     } catch (err) {
-      console.log("[v0] Exception in handleAddCertification:", err)
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      toast.error(`Error saving certification: ${errorMsg}`)
     } finally {
       setIsSavingCert(false)
     }
