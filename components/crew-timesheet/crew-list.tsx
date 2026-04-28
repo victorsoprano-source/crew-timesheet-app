@@ -215,7 +215,6 @@ export function CrewList({ onNavigate }: CrewListProps) {
     console.log("[v0] handleCertPhotoUpload called:", { fileName: file.name, fileType: file.type, fileSize: file.size })
     
     setIsUploadingCertPhoto(true)
-    setDetectedCertData(null)
     
     try {
       // First, convert to JPEG using the image utils
