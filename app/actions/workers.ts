@@ -229,6 +229,8 @@ export async function deleteWorker(
 
 // Worker Certifications functions
 export async function getWorkerCertifications(workerId?: string): Promise<WorkerCertification[]> {
+  console.log("[v0] SERVER getWorkerCertifications called, workerId:", workerId)
+  
   const supabase = await createClient()
 
   let query = supabase
@@ -246,9 +248,11 @@ export async function getWorkerCertifications(workerId?: string): Promise<Worker
   const { data, error } = await query
 
   if (error) {
-    console.error("Error fetching certifications:", error)
+    console.log("[v0] SERVER getWorkerCertifications error:", error.message)
     return []
   }
+
+  console.log("[v0] SERVER getWorkerCertifications found:", data?.length, "certifications")
 
   return (data || []).map((cert: { workers?: { name: string } | null }) => ({
     ...cert,
@@ -289,25 +293,32 @@ export async function addWorkerCertification(data: {
   issueDate: string
   expirationDate: string
 }): Promise<{ success: boolean; certification?: WorkerCertification; error?: string }> {
+  console.log("[v0] SERVER addWorkerCertification called with:", JSON.stringify(data))
+  
   const supabase = await createClient()
+
+  const insertData = {
+    worker_id: data.workerId,
+    certification_type: data.certificationType,
+    photo_pathname: data.photoPathname || null,
+    issue_date: data.issueDate,
+    expiration_date: data.expirationDate,
+  }
+  
+  console.log("[v0] SERVER inserting into worker_certifications:", JSON.stringify(insertData))
 
   const { data: cert, error } = await supabase
     .from("worker_certifications")
-    .insert({
-      worker_id: data.workerId,
-      certification_type: data.certificationType,
-      photo_pathname: data.photoPathname || null,
-      issue_date: data.issueDate,
-      expiration_date: data.expirationDate,
-    })
+    .insert(insertData)
     .select()
     .single()
 
   if (error) {
-    console.error("Error adding certification:", error)
+    console.log("[v0] SERVER insert error:", error.message, error.details, error.hint)
     return { success: false, error: error.message }
   }
 
+  console.log("[v0] SERVER insert success, cert id:", cert?.id)
   revalidatePath("/")
   return { success: true, certification: cert }
 }

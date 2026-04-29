@@ -309,6 +309,13 @@ export function CrewList({ onNavigate }: CrewListProps) {
 
   // Add certification handler
   const handleAddCertification = async () => {
+    console.log("[v0] handleAddCertification called")
+    console.log("[v0] editingWorker:", editingWorker?.id, editingWorker?.name)
+    console.log("[v0] certificationType:", newCertForm.certificationType)
+    console.log("[v0] issueDate:", newCertForm.issueDate)
+    console.log("[v0] expirationDate:", newCertForm.expirationDate)
+    console.log("[v0] photoPathname:", newCertForm.photoPathname)
+    
     if (!editingWorker) {
       toast.error("No worker selected")
       return
@@ -324,18 +331,26 @@ export function CrewList({ onNavigate }: CrewListProps) {
     
     setIsSavingCert(true)
     
+    const certData = {
+      workerId: editingWorker.id,
+      certificationType: newCertForm.certificationType,
+      photoPathname: newCertForm.photoPathname || undefined,
+      issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
+      expirationDate: newCertForm.expirationDate,
+    }
+    
+    console.log("[v0] Calling addWorkerCertification with:", certData)
+    
     try {
-      const result = await addWorkerCertification({
-        workerId: editingWorker.id,
-        certificationType: newCertForm.certificationType,
-        photoPathname: newCertForm.photoPathname || undefined,
-        issueDate: newCertForm.issueDate || new Date().toISOString().split('T')[0],
-        expirationDate: newCertForm.expirationDate,
-      })
+      const result = await addWorkerCertification(certData)
+      
+      console.log("[v0] addWorkerCertification result:", result)
       
       if (result.success) {
+        console.log("[v0] Save succeeded, refreshing certifications...")
         // Refresh certifications list
         const certs = await getWorkerCertifications(editingWorker.id)
+        console.log("[v0] Fetched certs after save:", certs.length, certs)
         setEditWorkerCerts(certs)
         // Reset form
         setNewCertForm({
@@ -348,9 +363,11 @@ export function CrewList({ onNavigate }: CrewListProps) {
         setShowAddCertForm(false)
         toast.success("Certification saved successfully")
       } else {
+        console.log("[v0] Save failed:", result.error)
         toast.error(result.error || "Failed to save certification")
       }
     } catch (err) {
+      console.log("[v0] Exception in handleAddCertification:", err)
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       toast.error(`Error saving certification: ${errorMsg}`)
     } finally {
