@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { AutocompleteInput } from "@/components/ui/autocomplete-input"
-import { useInputMemory } from "@/hooks/use-input-memory"
+
 import { getWeeklyTotalsFromTimesheets, getDailyWorkerTotals, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type DailyWorkerTotals, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
+import { getEquipmentByType } from "@/lib/equipment-list"
 
 // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
 const getCurrentDayIndex = () => {
@@ -54,7 +54,6 @@ export function DailyReports() {
   const [apprenticeYear2Count, setApprenticeYear2Count] = useState(0)
   const [apprenticeYear3Count, setApprenticeYear3Count] = useState(0)
   const [equipment, setEquipment] = useState<string[]>([])
-  const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
@@ -63,9 +62,6 @@ export function DailyReports() {
   const [pdfType, setPdfType] = useState<"master" | "summary" | "daily" | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
-
-  // Autocomplete memory for equipment
-  const equipmentMemory = useInputMemory({ fieldType: "equipment" })
 
   const getWeekDays = (weekStart: Date) => {
     const days = []
@@ -410,18 +406,7 @@ export function DailyReports() {
     }
   }
 
-  const addEquipmentItem = () => {
-    if (newEquipment.trim()) {
-      const trimmedValue = newEquipment.trim()
-      setEquipment([...equipment, trimmedValue])
-      equipmentMemory.saveValue(trimmedValue) // Save to autocomplete memory
-      setNewEquipment("")
-    }
-  }
-
-  const removeEquipmentItem = (index: number) => {
-    setEquipment(equipment.filter((_, i) => i !== index))
-  }
+  
 
   useEffect(() => {
     loadData()
@@ -1506,37 +1491,48 @@ export function DailyReports() {
             <Wrench className="h-4 w-4" />
             Equipment Used
           </label>
-          <div className="flex gap-2 mb-2">
-            <AutocompleteInput
-              fieldType="equipment"
-              placeholder="Add equipment..."
-              value={newEquipment}
-              onChange={(value) => setNewEquipment(value)}
-              autoSaveOnBlur={false}
-              className="bg-input border-border"
-            />
-            <Button variant="outline" size="sm" onClick={addEquipmentItem} className="shrink-0">
-              <Plus className="h-4 w-4" />
-            </Button>
+          
+          {/* Equipment Selection from Master List */}
+          <div className="bg-input border border-border rounded-lg p-3 mb-2">
+            {Object.entries(getEquipmentByType()).map(([type, items]) => (
+              <div key={type} className="mb-3 last:mb-0">
+                <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">{type}s</p>
+                <div className="flex flex-col gap-1.5">
+                  {items.map((eq) => {
+                    const isSelected = equipment.includes(eq.name)
+                    return (
+                      <label
+                        key={eq.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-md cursor-pointer transition-colors ${
+                          isSelected ? "bg-primary/10 border border-primary/30" : "bg-card hover:bg-secondary/50 border border-transparent"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEquipment([...equipment, eq.name])
+                            } else {
+                              setEquipment(equipment.filter(item => item !== eq.name))
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-foreground">{eq.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
+          
+          {/* Show selected equipment count */}
           {equipment.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {equipment.map((item, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-secondary rounded-md text-sm"
-                >
-                  {item}
-                  <button
-                    type="button"
-                    onClick={() => removeEquipmentItem(index)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {equipment.length} machine{equipment.length !== 1 ? 's' : ''} selected
+            </p>
           )}
         </div>
 
