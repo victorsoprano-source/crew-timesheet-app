@@ -84,11 +84,6 @@ function formatShortDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 }
 
-function formatDateWithMonth(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00")
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-}
-
 interface WorkerSummary {
   name: string
   level: string
@@ -108,12 +103,6 @@ interface DailyFieldReportData {
   apprentice_year3_count: number
   equipment: string[]
   problems_notes: string | null
-}
-
-interface ReportPhotoData {
-  work_date: string
-  photo_pathname: string
-  caption: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -210,16 +199,7 @@ export async function GET(request: NextRequest) {
 
     const fieldReports: DailyFieldReportData[] = fieldReportsResult.data || []
 
-    // Get photos for this week
-    const photosResult = await supabase
-      .from("report_photos")
-      .select("work_date, photo_pathname, caption")
-      .eq("week_start", weekStart)
-      .order("work_date", { ascending: true })
-
-    const photos: ReportPhotoData[] = photosResult.data || []
-
-    return generateSummaryPDF(weekStart, weekEndStr, isWeekComplete, workers, fieldReports, photos)
+    return generateSummaryPDF(weekStart, weekEndStr, isWeekComplete, workers, fieldReports)
 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
@@ -232,8 +212,7 @@ async function generateSummaryPDF(
   weekEnd: string,
   isWeekComplete: boolean,
   workers: WorkerSummary[],
-  fieldReports: DailyFieldReportData[],
-  photos: ReportPhotoData[]
+  fieldReports: DailyFieldReportData[]
 ): Promise<NextResponse> {
   try {
     const doc = await PDFDocument.create()
@@ -262,7 +241,7 @@ async function generateSummaryPDF(
         start: { x: margin, y: y },
         end: { x: width - margin, y: y },
         thickness: 0.5,
-        color: rgb(0.85, 0.85, 0.85),
+        color: rgb(0.8, 0.8, 0.8),
       })
       y -= 15
     }
@@ -300,96 +279,7 @@ async function generateSummaryPDF(
     y -= 25
     drawHR()
 
-    // ===== CREW COMPOSITION THIS WEEK =====
-    page.drawText("CREW COMPOSITION THIS WEEK", {
-      x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
-    })
-    y -= 20
-
-    // Count workers by level (only those with hours > 0)
-    let jmCount = 0, app1Count = 0, app2Count = 0, app3Count = 0
-    for (const w of workers) {
-      if (w.totalHours > 0) {
-        if (w.level === "Journeyman") jmCount++
-        else if (w.level === "Apprentice Year 1") app1Count++
-        else if (w.level === "Apprentice Year 2") app2Count++
-        else if (w.level === "Apprentice Year 3") app3Count++
-        else jmCount++ // Default to journeyman
-      }
-    }
-
-    // Format as requested: "Journeyman: X"
-    page.drawText(`Journeyman: ${jmCount}`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
-    y -= 14
-    page.drawText(`Apprentice Year 1: ${app1Count}`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
-    y -= 14
-    page.drawText(`Apprentice Year 2: ${app2Count}`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
-    y -= 14
-    page.drawText(`Apprentice Year 3: ${app3Count}`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
-    y -= 25
-    drawHR()
-
-    // ===== EQUIPMENT SUMMARY (Count at top) =====
-    const equipmentByMachine = new Map<string, string[]>() // equipment -> dates used
-    for (const report of fieldReports) {
-      if (report.equipment && Array.isArray(report.equipment)) {
-        for (const eq of report.equipment) {
-          if (eq && eq.trim()) {
-            const eqName = sanitizeText(eq)
-            if (!equipmentByMachine.has(eqName)) {
-              equipmentByMachine.set(eqName, [])
-            }
-            equipmentByMachine.get(eqName)!.push(report.work_date)
-          }
-        }
-      }
-    }
-
-    page.drawText("EQUIPMENT SUMMARY", {
-      x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
-    })
-    y -= 20
-
-    page.drawText(`Total Equipment Types: ${equipmentByMachine.size}`, {
-      x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.3),
-    })
-    y -= 20
-
-    // List each equipment with dates
-    if (equipmentByMachine.size > 0) {
-      for (const [equipment, dates] of equipmentByMachine) {
-        checkPageBreak(40)
-        
-        page.drawText(equipment, {
-          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.2, 0.2, 0.2),
-        })
-        y -= 14
-
-        page.drawText("Used:", {
-          x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
-        })
-        y -= 12
-
-        // List dates as bullet points
-        for (const dateStr of dates) {
-          checkPageBreak(14)
-          page.drawText(`  - ${formatDateWithMonth(dateStr)}`, {
-            x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
-          })
-          y -= 12
-        }
-        y -= 6
-      }
-    } else {
-      page.drawText("No equipment recorded this week.", {
-        x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-      })
-      y -= 14
-    }
-    y -= 10
-    drawHR()
-
-    // ===== WEEKLY TOTALS BOX with Overtime Highlight =====
+    // ===== WEEKLY TOTALS BOX =====
     let totalST = 0, totalOT = 0, totalDT = 0
     for (const w of workers) {
       totalST += w.totalST
@@ -398,9 +288,7 @@ async function generateSummaryPDF(
     }
     const totalHours = totalST + totalOT + totalDT
 
-    checkPageBreak(100)
-    
-    page.drawText("WEEKLY TOTALS", {
+    page.drawText("SUMMARY", {
       x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
     })
     y -= 20
@@ -411,8 +299,8 @@ async function generateSummaryPDF(
       y: y - 70,
       width: width - (margin * 2),
       height: 70,
-      color: rgb(0.95, 0.95, 0.98),
-      borderColor: rgb(0.8, 0.8, 0.85),
+      color: rgb(0.96, 0.96, 0.98),
+      borderColor: rgb(0.85, 0.85, 0.88),
       borderWidth: 1,
     })
 
@@ -431,32 +319,123 @@ async function generateSummaryPDF(
     page.drawText(`${workers.length}`, { x: margin + 15, y: valY, size: 18, font: fontBold, color: rgb(0.1, 0.1, 0.2) })
     page.drawText(`${totalHours}`, { x: margin + 15 + colWidth, y: valY, size: 18, font: fontBold, color: rgb(0.1, 0.1, 0.2) })
     page.drawText(`${totalST}`, { x: margin + 15 + colWidth * 2, y: valY, size: 16, font: fontBold, color: rgb(0.2, 0.5, 0.3) })
-    
-    // Highlight Overtime in amber/orange
+    // Overtime in amber
     page.drawText(`${totalOT}`, { x: margin + 15 + colWidth * 3, y: valY, size: 16, font: fontBold, color: rgb(0.85, 0.55, 0.1) })
-    
-    // Highlight Double Time in red
+    // Double Time in red
     page.drawText(`${totalDT}`, { x: margin + 15 + colWidth * 4, y: valY, size: 16, font: fontBold, color: rgb(0.8, 0.2, 0.2) })
 
     y -= 90
     drawHR()
 
+    // ===== CREW COMPOSITION =====
+    page.drawText("CREW COMPOSITION", {
+      x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
+    })
+    y -= 20
+
+    // Count workers by level
+    let jmCount = 0, app1Count = 0, app2Count = 0, app3Count = 0
+    for (const w of workers) {
+      if (w.totalHours > 0) {
+        if (w.level === "Journeyman") jmCount++
+        else if (w.level === "Apprentice Year 1") app1Count++
+        else if (w.level === "Apprentice Year 2") app2Count++
+        else if (w.level === "Apprentice Year 3") app3Count++
+        else jmCount++
+      }
+    }
+
+    page.drawText(`Journeyman: ${jmCount}`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+    page.drawText(`Apprentice Year 1: ${app1Count}`, { x: margin + 150, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+    y -= 14
+    page.drawText(`Apprentice Year 2: ${app2Count}`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+    page.drawText(`Apprentice Year 3: ${app3Count}`, { x: margin + 150, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+    y -= 25
+    drawHR()
+
+    // ===== EQUIPMENT USED =====
+    // Group equipment by type and merge duplicate entries with dates
+    const equipmentByType = new Map<string, Set<string>>() // equipment -> Set of dates
+    for (const report of fieldReports) {
+      if (report.equipment && Array.isArray(report.equipment)) {
+        for (const eq of report.equipment) {
+          if (eq && eq.trim()) {
+            const eqName = sanitizeText(eq)
+            if (!equipmentByType.has(eqName)) {
+              equipmentByType.set(eqName, new Set())
+            }
+            equipmentByType.get(eqName)!.add(report.work_date)
+          }
+        }
+      }
+    }
+
+    // Categorize equipment into types
+    const manLifts: [string, string[]][] = []
+    const forklifts: [string, string[]][] = []
+    const arrowBoards: [string, string[]][] = []
+    const otherEquip: [string, string[]][] = []
+
+    for (const [equipment, dates] of equipmentByType) {
+      const eqLower = equipment.toLowerCase()
+      const dateArr = Array.from(dates).sort()
+      if (eqLower.includes("lift") || eqLower.includes("boom") || eqLower.includes("scissor") || eqLower.includes("aerial")) {
+        manLifts.push([equipment, dateArr])
+      } else if (eqLower.includes("forklift") || eqLower.includes("fork lift")) {
+        forklifts.push([equipment, dateArr])
+      } else if (eqLower.includes("arrow") || eqLower.includes("board") || eqLower.includes("sign")) {
+        arrowBoards.push([equipment, dateArr])
+      } else {
+        otherEquip.push([equipment, dateArr])
+      }
+    }
+
+    page.drawText("EQUIPMENT USED", {
+      x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
+    })
+    y -= 20
+
+    const drawEquipmentCategory = (title: string, items: [string, string[]][]) => {
+      if (items.length === 0) return
+      checkPageBreak(30)
+      page.drawText(title, { x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.3) })
+      y -= 14
+      for (const [name, dates] of items) {
+        checkPageBreak(14)
+        const dateStr = dates.map(d => formatShortDate(d).split(",")[0]).join(", ")
+        page.drawText(`  - ${name}`, { x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+        page.drawText(`(${dateStr})`, { x: margin + 220, y, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
+        y -= 12
+      }
+      y -= 6
+    }
+
+    drawEquipmentCategory("Man Lifts", manLifts)
+    drawEquipmentCategory("Forklifts", forklifts)
+    drawEquipmentCategory("Arrow Boards", arrowBoards)
+    drawEquipmentCategory("Other Equipment", otherEquip)
+
+    if (equipmentByType.size === 0) {
+      page.drawText("No equipment recorded this week.", { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
+      y -= 14
+    }
+
+    y -= 10
+    drawHR()
+
     // ===== WORKER DETAILS =====
-    checkPageBreak(80)
+    checkPageBreak(60)
     page.drawText("WORKER DETAILS", {
       x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
     })
     y -= 20
 
     if (workers.length === 0) {
-      page.drawText("No workers with hours this week.", {
-        x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-      })
+      page.drawText("No workers with hours this week.", { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
       y -= 20
     } else {
       for (const worker of workers) {
-        checkPageBreak(20)
-
+        checkPageBreak(18)
         page.drawText(`${sanitizeText(worker.name)} (${worker.levelAbbr})`, {
           x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1),
         })
@@ -466,85 +445,40 @@ async function generateSummaryPDF(
         page.drawText(`ST: ${worker.totalST}  OT: ${worker.totalOT}  DT: ${worker.totalDT}`, {
           x: margin + 350, y, size: 8, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
         })
-        y -= 18
+        y -= 16
       }
     }
 
-    y -= 15
+    y -= 10
     drawHR()
 
-    // ===== DAILY WORK SUMMARY (Bullet points per day) =====
+    // ===== DAILY WORK SUMMARY (Bullet points) =====
     const reportsWithWork = fieldReports.filter(r => r.work_performed && r.work_performed.trim())
     if (reportsWithWork.length > 0) {
-      checkPageBreak(60)
+      checkPageBreak(50)
       page.drawText("DAILY WORK SUMMARY", {
         x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
       })
       y -= 20
 
       for (const report of reportsWithWork) {
-        checkPageBreak(50)
-
+        checkPageBreak(40)
         const dateLabel = formatShortDate(report.work_date)
-        page.drawText(dateLabel, {
-          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.2, 0.2, 0.2),
-        })
-        y -= 16
+        page.drawText(dateLabel, { x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.2, 0.2, 0.2) })
+        y -= 14
 
-        // Convert work performed text to bullet points
+        // Convert to bullet points
         const workText = sanitizeText(report.work_performed)
-        
-        // Split by common delimiters (periods, semicolons, newlines, or numbered lists)
         const bullets = workText
           .split(/[.;]\s*|\n+|\d+[.)]\s*/)
           .map(s => s.trim())
-          .filter(s => s.length > 3) // Filter out very short fragments
-        
-        for (const bullet of bullets.slice(0, 5)) { // Max 5 bullets per day
-          checkPageBreak(14)
-          const bulletText = bullet.length > 70 ? bullet.substring(0, 67) + "..." : bullet
-          page.drawText(`  - ${bulletText}`, {
-            x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
-          })
-          y -= 13
-        }
-        y -= 8
-      }
-      y -= 10
-      drawHR()
-    }
-
-    // ===== NOTES/PROBLEMS =====
-    const reportsWithNotes = fieldReports.filter(r => r.problems_notes && r.problems_notes.trim())
-    if (reportsWithNotes.length > 0) {
-      checkPageBreak(50)
-      page.drawText("NOTES & ISSUES", {
-        x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
-      })
-      y -= 20
-
-      for (const report of reportsWithNotes) {
-        checkPageBreak(30)
-        const dateLabel = formatShortDate(report.work_date)
-        page.drawText(dateLabel, {
-          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.3),
-        })
-        y -= 14
-        
-        const noteText = sanitizeText(report.problems_notes)
-        // Split into bullet points
-        const noteBullets = noteText
-          .split(/[.;]\s*|\n+/)
-          .map(s => s.trim())
           .filter(s => s.length > 3)
         
-        for (const bullet of noteBullets.slice(0, 3)) {
-          checkPageBreak(14)
-          const bulletText = bullet.length > 70 ? bullet.substring(0, 67) + "..." : bullet
-          page.drawText(`  - ${bulletText}`, {
-            x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
-          })
-          y -= 13
+        for (const bullet of bullets.slice(0, 5)) {
+          checkPageBreak(12)
+          const bulletText = bullet.length > 80 ? bullet.substring(0, 77) + "..." : bullet
+          page.drawText(`  - ${bulletText}`, { x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3) })
+          y -= 12
         }
         y -= 6
       }
@@ -552,120 +486,87 @@ async function generateSummaryPDF(
       drawHR()
     }
 
-    // ===== PHOTOS SECTION (with thumbnails placeholder and captions) =====
-    const photosByDate = new Map<string, ReportPhotoData[]>()
-    for (const photo of photos) {
-      if (!photosByDate.has(photo.work_date)) {
-        photosByDate.set(photo.work_date, [])
-      }
-      photosByDate.get(photo.work_date)!.push(photo)
-    }
-
-    if (photosByDate.size > 0) {
-      checkPageBreak(80)
-      page.drawText("PHOTOS", {
+    // ===== NOTES =====
+    const reportsWithNotes = fieldReports.filter(r => r.problems_notes && r.problems_notes.trim())
+    if (reportsWithNotes.length > 0) {
+      checkPageBreak(40)
+      page.drawText("NOTES", {
         x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
       })
       y -= 20
 
-      for (const [date, datePhotos] of photosByDate) {
-        checkPageBreak(50)
-        const dateLabel = formatShortDate(date)
-        page.drawText(dateLabel, {
-          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.3),
-        })
-        y -= 16
-
-        // Draw photo placeholders (thumbnails) - in a row
-        const thumbWidth = 80
-        const thumbHeight = 60
-        const thumbSpacing = 10
-        let thumbX = margin + 25
-
-        for (let i = 0; i < Math.min(datePhotos.length, 4); i++) {
-          const photo = datePhotos[i]
-          
-          // Draw thumbnail placeholder box
-          page.drawRectangle({
-            x: thumbX,
-            y: y - thumbHeight,
-            width: thumbWidth,
-            height: thumbHeight,
-            borderColor: rgb(0.7, 0.7, 0.7),
-            borderWidth: 0.5,
-            color: rgb(0.95, 0.95, 0.95),
-          })
-
-          // Draw image icon in center
-          page.drawText("[IMG]", {
-            x: thumbX + 25,
-            y: y - thumbHeight / 2 - 4,
-            size: 10,
-            font: fontRegular,
-            color: rgb(0.6, 0.6, 0.6),
-          })
-
-          thumbX += thumbWidth + thumbSpacing
+      for (const report of reportsWithNotes) {
+        checkPageBreak(30)
+        const dateLabel = formatShortDate(report.work_date)
+        page.drawText(dateLabel, { x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.3) })
+        y -= 14
+        
+        const noteText = sanitizeText(report.problems_notes)
+        const noteBullets = noteText
+          .split(/[.;]\s*|\n+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 3)
+        
+        for (const bullet of noteBullets.slice(0, 3)) {
+          checkPageBreak(12)
+          const bulletText = bullet.length > 80 ? bullet.substring(0, 77) + "..." : bullet
+          page.drawText(`  - ${bulletText}`, { x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.4, 0.4, 0.4) })
+          y -= 12
         }
-        y -= thumbHeight + 8
-
-        // Photo captions
-        for (let i = 0; i < Math.min(datePhotos.length, 4); i++) {
-          const photo = datePhotos[i]
-          if (photo.caption) {
-            checkPageBreak(14)
-            const captionText = sanitizeText(photo.caption).substring(0, 50)
-            page.drawText(`  Photo ${i + 1}: ${captionText}`, {
-              x: margin + 25, y, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-            })
-            y -= 12
-          }
-        }
-        y -= 10
+        y -= 6
       }
       y -= 10
       drawHR()
     }
 
-    // ===== FOREMAN SIGNATURE SECTION =====
-    checkPageBreak(100)
+    // ===== FOREMAN SIGNATURE =====
+    checkPageBreak(80)
     page.drawText("FOREMAN SIGNATURE", {
       x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
     })
     y -= 30
 
-    page.drawText("Foreman: _________________________________", {
-      x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
+    // Signature line
+    page.drawText("Name:", { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.4, 0.4, 0.4) })
+    page.drawLine({
+      start: { x: margin + 60, y: y - 2 },
+      end: { x: margin + 250, y: y - 2 },
+      thickness: 0.5,
+      color: rgb(0.6, 0.6, 0.6),
     })
     y -= 25
 
-    page.drawText("Signature: _________________________________", {
-      x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
+    page.drawText("Signature:", { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.4, 0.4, 0.4) })
+    page.drawLine({
+      start: { x: margin + 80, y: y - 2 },
+      end: { x: margin + 250, y: y - 2 },
+      thickness: 0.5,
+      color: rgb(0.6, 0.6, 0.6),
     })
-    y -= 25
-
-    page.drawText("Date: _________________________________", {
-      x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
-    })
-    y -= 30
-
-    // ===== FOOTER =====
-    page.drawText(`Generated: ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`, {
-      x: margin, y: margin - 10, size: 8, font: fontRegular, color: rgb(0.6, 0.6, 0.6),
+    
+    page.drawText("Date:", { x: margin + 300, y, size: 10, font: fontRegular, color: rgb(0.4, 0.4, 0.4) })
+    page.drawLine({
+      start: { x: margin + 340, y: y - 2 },
+      end: { x: width - margin, y: y - 2 },
+      thickness: 0.5,
+      color: rgb(0.6, 0.6, 0.6),
     })
 
+    // Save PDF
     const pdfBytes = await doc.save()
+    
+    const startFmtFile = weekStart.replace(/-/g, "")
+    const filename = `Weekly_Summary_${startFmtFile}.pdf`
 
     return new NextResponse(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Weekly_Summary_${weekStart}.pdf"`,
-        "Content-Length": pdfBytes.length.toString(),
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Pragma": "no-cache",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": String(pdfBytes.length),
       },
     })
+
   } catch (error) {
     const message = error instanceof Error ? error.message : "PDF generation failed"
     return NextResponse.json({ error: message }, { status: 500 })
