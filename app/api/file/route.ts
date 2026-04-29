@@ -18,11 +18,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing pathname' }, { status: 400 })
   }
 
-  console.log('[v0] File API: Serving file with pathname:', pathname)
+  console.log('[v0] PHOTO PATH:', pathname)
 
   // Detect storage type based on pathname pattern
   const isOldVercelBlob = pathname.startsWith('timesheet-photos/')
-  const isNewSupabase = /^\d{4}-\d{2}-\d{2}\//.test(pathname) || pathname.startsWith('reports/') || pathname.startsWith('daily-reports/')
+  const isNewSupabase = /^\d{4}-\d{2}-\d{2}\//.test(pathname) || 
+    pathname.startsWith('reports/') || 
+    pathname.startsWith('daily-reports/') ||
+    pathname.startsWith('worker-certificates/')
 
   try {
     // Try Vercel Blob first for old photos

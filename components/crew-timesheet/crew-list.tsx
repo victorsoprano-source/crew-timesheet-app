@@ -1324,9 +1324,24 @@ function CertThumbnail({
 }) {
   const [error, setError] = useState(false)
   
-  const photoUrl = cert.photo_pathname?.startsWith("http")
+  // Debug logging
+  console.log("[v0] PHOTO PATH:", cert.photo_pathname)
+  
+  // Validate pathname exists and is not empty
+  if (!cert.photo_pathname || cert.photo_pathname.trim() === "") {
+    return (
+      <div 
+        className="h-12 w-12 rounded-lg bg-muted/50 flex flex-col items-center justify-center flex-shrink-0"
+      >
+        <ImageOff className="h-4 w-4 text-muted-foreground/70" />
+        <span className="text-[8px] text-muted-foreground/50 mt-0.5">None</span>
+      </div>
+    )
+  }
+  
+  const photoUrl = cert.photo_pathname.startsWith("http")
     ? cert.photo_pathname
-    : `/api/file?pathname=${encodeURIComponent(cert.photo_pathname || "")}`
+    : `/api/file?pathname=${encodeURIComponent(cert.photo_pathname)}`
   
   if (error) {
     return (
@@ -1335,7 +1350,7 @@ function CertThumbnail({
         onClick={onClick}
       >
         <ImageOff className="h-4 w-4 text-muted-foreground/70" />
-        <span className="text-[8px] text-muted-foreground/50 mt-0.5">N/A</span>
+        <span className="text-[8px] text-muted-foreground/50 mt-0.5">Error</span>
       </div>
     )
   }

@@ -84,9 +84,17 @@ export function CertificateGallery({
   
   if (!currentPhoto) return null
   
-  const photoUrl = currentPhoto.photo_pathname.startsWith("http") 
-    ? currentPhoto.photo_pathname 
-    : `/api/file?pathname=${encodeURIComponent(currentPhoto.photo_pathname)}`
+  // Debug logging
+  console.log("[v0] PHOTO PATH:", currentPhoto.photo_pathname)
+  
+  // Validate pathname
+  const hasValidPath = currentPhoto.photo_pathname && currentPhoto.photo_pathname.trim() !== ""
+  
+  const photoUrl = hasValidPath 
+    ? (currentPhoto.photo_pathname.startsWith("http") 
+        ? currentPhoto.photo_pathname 
+        : `/api/file?pathname=${encodeURIComponent(currentPhoto.photo_pathname)}`)
+    : null
   
   const status = getCertificationStatus(currentPhoto.expiration_date)
   
@@ -148,11 +156,11 @@ export function CertificateGallery({
             </div>
           )}
           
-          {imageError ? (
+          {imageError || !photoUrl ? (
             <div className="flex flex-col items-center justify-center text-white/60 bg-card/20 rounded-xl p-8">
               <ImageOff className="h-16 w-16 mb-4 opacity-50" />
               <p className="text-lg font-medium">Photo unavailable</p>
-              <p className="text-sm mt-1">Unable to load this certificate photo</p>
+              <p className="text-sm mt-1">{!photoUrl ? "No photo path found" : "Unable to load this certificate photo"}</p>
             </div>
           ) : (
             <img
