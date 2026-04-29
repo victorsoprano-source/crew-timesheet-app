@@ -264,7 +264,7 @@ export function getStatusBadgeClass(status: CertificationStatus): string {
     case "expired":
       return "bg-red-500/20 text-red-400 border-red-500/30"
     case "pending":
-      return "bg-blue-500/20 text-blue-400 border-blue-500/30"
+      return "bg-primary/20 text-primary border-primary/30"
     default:
       return "bg-muted text-muted-foreground"
   }
