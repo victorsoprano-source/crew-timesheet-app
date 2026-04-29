@@ -15,14 +15,22 @@ export default function CrewTimesheetApp() {
   const [appReady, setAppReady] = useState(false)
   const [currentScreen, setCurrentScreen] = useState("dashboard")
 
-  // Wait for client-side hydration and a brief delay for styles to load
   useEffect(() => {
-    // Small delay to ensure CSS is fully parsed and applied
-    const timer = setTimeout(() => {
+    const savedScreen = localStorage.getItem("crew-current-screen")
+    if (savedScreen) {
+      setCurrentScreen(savedScreen)
+    }
+
+    requestAnimationFrame(() => {
       setAppReady(true)
-    }, 100)
-    return () => clearTimeout(timer)
+    })
   }, [])
+
+  useEffect(() => {
+    if (appReady) {
+      localStorage.setItem("crew-current-screen", currentScreen)
+    }
+  }, [currentScreen, appReady])
 
   const getScreenTitle = (screen: string) => {
     switch (screen) {
@@ -54,63 +62,61 @@ export default function CrewTimesheetApp() {
       case "certifications":
         return <Certifications />
       default:
-        return <Dashboard supervisorName="John Martinez" onNavigate={setCurrentScreen} />
+        return <Dashboard supervisorName="Victor Rodriguez" onNavigate={setCurrentScreen} />
     }
   }
 
-  // Show loading screen until app is ready to prevent FOUC
   if (!appReady) {
     return (
-      <div 
-        style={{ 
-          minHeight: '100vh',
-          maxWidth: '28rem',
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#1a1b2e',
-          padding: '1rem',
+      <div
+        style={{
+          minHeight: "100vh",
+          maxWidth: "28rem",
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#1a1b2e",
+          padding: "1rem",
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
-          {/* App Icon */}
-          <div 
-            style={{ 
-              width: '4rem', 
-              height: '4rem', 
-              borderRadius: '1rem',
-              backgroundColor: '#5b8def',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
+          <div
+            style={{
+              width: "4rem",
+              height: "4rem",
+              borderRadius: "1rem",
+              backgroundColor: "#5b8def",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <HardHat style={{ height: '2rem', width: '2rem', color: '#ffffff' }} />
+            <HardHat style={{ height: "2rem", width: "2rem", color: "#ffffff" }} />
           </div>
-          
-          {/* App Title */}
-          <h1 style={{ 
-            fontSize: '1.5rem', 
-            fontWeight: 700, 
-            color: '#fafafa',
-            margin: 0,
-          }}>
+
+          <h1
+            style={{
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              color: "#fafafa",
+              margin: 0,
+            }}
+          >
             Crew Timesheet
           </h1>
-          
-          {/* Loading Spinner and Text */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
-            <Loader2 
-              style={{ 
-                height: '1.5rem', 
-                width: '1.5rem', 
-                color: '#5b8def',
-                animation: 'spin 1s linear infinite',
-              }} 
+
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginTop: "1rem" }}>
+            <Loader2
+              style={{
+                height: "1.5rem",
+                width: "1.5rem",
+                color: "#5b8def",
+                animation: "spin 1s linear infinite",
+              }}
             />
-            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#a1a1aa', margin: 0 }}>
+            <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#a1a1aa", margin: 0 }}>
               Loading crew data...
             </p>
           </div>
@@ -121,7 +127,6 @@ export default function CrewTimesheetApp() {
 
   return (
     <div className="min-h-screen bg-background max-w-md mx-auto relative">
-      {/* Header for sub-screens */}
       {currentScreen !== "dashboard" && (
         <header className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-background border-b border-border">
           <Button
@@ -136,12 +141,8 @@ export default function CrewTimesheetApp() {
         </header>
       )}
 
-      {/* Main Content */}
-      <main className="pb-20">
-        {renderScreen()}
-      </main>
+      <main className="pb-20">{renderScreen()}</main>
 
-      {/* Bottom Navigation */}
       <BottomNav currentScreen={currentScreen} onNavigate={setCurrentScreen} />
     </div>
   )
