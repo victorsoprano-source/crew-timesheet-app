@@ -14,7 +14,6 @@ async function createApiClient() {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   
   if (!supabaseUrl || !supabaseKey) {
-    console.error("[v0] Missing Supabase environment variables")
     throw new Error("Missing Supabase configuration")
   }
   
@@ -67,9 +66,6 @@ function getLevelAbbr(level: string): string {
   }
 }
 
-/**
- * Sanitize text for PDF rendering - removes/replaces unsupported characters
- */
 function sanitizeText(text: string | null | undefined): string {
   if (!text) return ""
   let result = String(text)
@@ -83,13 +79,36 @@ function sanitizeText(text: string | null | undefined): string {
   return result.trim() || ""
 }
 
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00")
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+}
+
 interface WorkerSummary {
   name: string
+  level: string
   levelAbbr: string
   totalST: number
   totalOT: number
   totalDT: number
   totalHours: number
+}
+
+interface DailyFieldReportData {
+  work_date: string
+  work_performed: string | null
+  journeyman_count: number
+  apprentice_year1_count: number
+  apprentice_year2_count: number
+  apprentice_year3_count: number
+  equipment: string[]
+  problems_notes: string | null
+}
+
+interface ReportPhotoData {
+  work_date: string
+  photo_pathname: string
+  caption: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -109,7 +128,7 @@ export async function GET(request: NextRequest) {
     weekEnd.setDate(weekEnd.getDate() + 6)
     const weekEndStr = weekEnd.toISOString().split("T")[0]
 
-    // Check if week is complete (today > weekEnd)
+    // Check if week is complete
     const today = new Date()
     const isWeekComplete = today > weekEnd
 
@@ -120,112 +139,82 @@ export async function GET(request: NextRequest) {
       "Timesheet query"
     )
 
-    if (timesheetResult.error || !timesheetResult.data) {
-      return generateSummaryPDF(weekStart, weekEndStr, isWeekComplete, [], null, null, null)
-    }
-
     // Get entries with worker info
-    const entriesResult = await withTimeout(
-      supabase
-        .from("timesheet_entries")
-        .select(`
-          worker_id,
-          regular_hours,
-          overtime_hours,
-          double_time_hours,
-          attendance_status,
-          worker:workers(id, name, level)
-        `)
-        .eq("timesheet_id", timesheetResult.data.id),
-      10000,
-      "Entries query"
-    )
+    let workers: WorkerSummary[] = []
+    if (timesheetResult.data) {
+      const entriesResult = await withTimeout(
+        supabase
+          .from("timesheet_entries")
+          .select(`
+            worker_id,
+            regular_hours,
+            overtime_hours,
+            double_time_hours,
+            attendance_status,
+            worker:workers(id, name, level)
+          `)
+          .eq("timesheet_id", timesheetResult.data.id),
+        10000,
+        "Entries query"
+      )
 
-    if (entriesResult.error) {
-      return NextResponse.json({ error: "Database error" }, { status: 500 })
-    }
+      if (!entriesResult.error) {
+        const workerMap = new Map<string, WorkerSummary>()
 
-    // Build worker summaries
-    const workerMap = new Map<string, WorkerSummary>()
+        for (const entry of entriesResult.data || []) {
+          const isAbsent = entry.attendance_status === "Absent"
+          const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
+          const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
+          const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
 
-    for (const entry of entriesResult.data || []) {
-      const isAbsent = entry.attendance_status === "Absent"
-      const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
-      const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
-      const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
+          const worker = entry.worker as { id: string; name: string; level?: string } | null
+          const workerLevel = worker?.level || "Journeyman"
 
-      const worker = entry.worker as { id: string; name: string; level?: string } | null
-      const workerLevel = worker?.level || "Journeyman"
+          let workerData = workerMap.get(entry.worker_id)
+          if (!workerData) {
+            workerData = {
+              name: worker?.name || "Unknown",
+              level: workerLevel,
+              levelAbbr: getLevelAbbr(workerLevel),
+              totalST: 0,
+              totalOT: 0,
+              totalDT: 0,
+              totalHours: 0,
+            }
+            workerMap.set(entry.worker_id, workerData)
+          }
 
-      let workerData = workerMap.get(entry.worker_id)
-      if (!workerData) {
-        workerData = {
-          name: worker?.name || "Unknown",
-          levelAbbr: getLevelAbbr(workerLevel),
-          totalST: 0,
-          totalOT: 0,
-          totalDT: 0,
-          totalHours: 0,
+          workerData.totalST += st
+          workerData.totalOT += ot
+          workerData.totalDT += dt
+          workerData.totalHours += st + ot + dt
         }
-        workerMap.set(entry.worker_id, workerData)
-      }
 
-      workerData.totalST += st
-      workerData.totalOT += ot
-      workerData.totalDT += dt
-      workerData.totalHours += st + ot + dt
+        workers = Array.from(workerMap.values())
+          .filter(w => w.totalHours > 0)
+          .sort((a, b) => a.name.localeCompare(b.name))
+      }
     }
 
-    // Get field report data (crew counts, equipment, notes)
+    // Get field reports for daily work summaries and equipment
     const fieldReportsResult = await supabase
       .from("daily_field_reports")
       .select("*")
       .eq("week_start", weekStart)
       .order("work_date", { ascending: true })
 
-    let crewSummary: { jm: number; app1: number; app2: number; app3: number } | null = null
-    let equipment: string[] = []
-    let notes: string | null = null
+    const fieldReports: DailyFieldReportData[] = fieldReportsResult.data || []
 
-    if (fieldReportsResult.data && fieldReportsResult.data.length > 0) {
-      // Aggregate crew counts (take max for each category)
-      let maxJM = 0, maxApp1 = 0, maxApp2 = 0, maxApp3 = 0
-      const allEquipment = new Set<string>()
-      const noteEntries: string[] = []
+    // Get photos for this week
+    const photosResult = await supabase
+      .from("report_photos")
+      .select("work_date, photo_pathname, caption")
+      .eq("week_start", weekStart)
+      .order("work_date", { ascending: true })
 
-      for (const report of fieldReportsResult.data) {
-        maxJM = Math.max(maxJM, report.journeyman_count || 0)
-        maxApp1 = Math.max(maxApp1, report.apprentice_year1_count || 0)
-        maxApp2 = Math.max(maxApp2, report.apprentice_year2_count || 0)
-        maxApp3 = Math.max(maxApp3, report.apprentice_year3_count || 0)
+    const photos: ReportPhotoData[] = photosResult.data || []
 
-        if (report.equipment && Array.isArray(report.equipment)) {
-          for (const eq of report.equipment) {
-            if (eq) allEquipment.add(eq)
-          }
-        }
-
-        if (report.problems_notes?.trim()) {
-          const d = new Date(report.work_date + "T12:00:00")
-          noteEntries.push(`${d.toLocaleDateString("en-US", { weekday: "short" })}: ${report.problems_notes}`)
-        }
-      }
-
-      if (maxJM > 0 || maxApp1 > 0 || maxApp2 > 0 || maxApp3 > 0) {
-        crewSummary = { jm: maxJM, app1: maxApp1, app2: maxApp2, app3: maxApp3 }
-      }
-
-      equipment = Array.from(allEquipment)
-      if (noteEntries.length > 0) {
-        notes = noteEntries.join(" | ")
-      }
-    }
-
-    const workers = Array.from(workerMap.values())
-      .filter(w => w.totalHours > 0)
-      .sort((a, b) => a.name.localeCompare(b.name))
-
-    return generateSummaryPDF(weekStart, weekEndStr, isWeekComplete, workers, crewSummary, equipment.length > 0 ? equipment : null, notes)
+    return generateSummaryPDF(weekStart, weekEndStr, isWeekComplete, workers, fieldReports, photos)
 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
@@ -238,14 +227,12 @@ async function generateSummaryPDF(
   weekEnd: string,
   isWeekComplete: boolean,
   workers: WorkerSummary[],
-  crewSummary: { jm: number; app1: number; app2: number; app3: number } | null,
-  equipment: string[] | null,
-  notes: string | null
+  fieldReports: DailyFieldReportData[],
+  photos: ReportPhotoData[]
 ): Promise<NextResponse> {
   try {
-    // Portrait: 612 x 792 (8.5" x 11")
     const doc = await PDFDocument.create()
-    const page = doc.addPage([612, 792])
+    let page = doc.addPage([612, 792]) // 8.5" x 11"
     const { width, height } = page.getSize()
     
     const fontRegular = await doc.embedFont(StandardFonts.Helvetica)
@@ -254,7 +241,17 @@ async function generateSummaryPDF(
     const margin = 50
     let y = height - margin
 
-    // Header
+    // Helper to check page break and add new page if needed
+    const checkPageBreak = (neededSpace: number) => {
+      if (y < margin + neededSpace) {
+        page = doc.addPage([612, 792])
+        y = height - margin
+        return true
+      }
+      return false
+    }
+
+    // ===== HEADER =====
     page.drawText("WEEKLY SUMMARY REPORT", {
       x: margin, y, size: 18, font: fontBold, color: rgb(0.1, 0.1, 0.2),
     })
@@ -284,9 +281,51 @@ async function generateSummaryPDF(
     page.drawText(`Status: ${statusText}`, {
       x: margin, y, size: 10, font: fontBold, color: statusColor,
     })
-    y -= 35
+    y -= 30
 
-    // Calculate totals
+    // ===== CREW COMPOSITION THIS WEEK =====
+    page.drawText("CREW COMPOSITION THIS WEEK", {
+      x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
+    })
+    y -= 18
+
+    // Count workers by level (only those with hours > 0)
+    let jmCount = 0, app1Count = 0, app2Count = 0, app3Count = 0
+    for (const w of workers) {
+      if (w.totalHours > 0) {
+        if (w.level === "Journeyman") jmCount++
+        else if (w.level === "Apprentice Year 1") app1Count++
+        else if (w.level === "Apprentice Year 2") app2Count++
+        else if (w.level === "Apprentice Year 3") app3Count++
+        else jmCount++ // Default to journeyman
+      }
+    }
+
+    if (jmCount > 0) {
+      page.drawText(`• ${jmCount} Journeyman`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+      y -= 14
+    }
+    if (app1Count > 0) {
+      page.drawText(`• ${app1Count} Apprentice - Year 1`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+      y -= 14
+    }
+    if (app2Count > 0) {
+      page.drawText(`• ${app2Count} Apprentice - Year 2`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+      y -= 14
+    }
+    if (app3Count > 0) {
+      page.drawText(`• ${app3Count} Apprentice - Year 3`, { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.2, 0.2, 0.2) })
+      y -= 14
+    }
+
+    if (jmCount === 0 && app1Count === 0 && app2Count === 0 && app3Count === 0) {
+      page.drawText("No crew data available.", { x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
+      y -= 14
+    }
+
+    y -= 20
+
+    // ===== WEEKLY TOTALS BOX =====
     let totalST = 0, totalOT = 0, totalDT = 0
     for (const w of workers) {
       totalST += w.totalST
@@ -295,146 +334,215 @@ async function generateSummaryPDF(
     }
     const totalHours = totalST + totalOT + totalDT
 
-    // Summary box
     page.drawRectangle({
       x: margin,
-      y: y - 70,
+      y: y - 55,
       width: width - (margin * 2),
-      height: 70,
+      height: 55,
       color: rgb(0.95, 0.95, 0.98),
       borderColor: rgb(0.8, 0.8, 0.85),
       borderWidth: 1,
     })
 
-    page.drawText("WEEKLY SUMMARY", {
-      x: margin + 15, y: y - 18, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.4),
+    page.drawText("WEEKLY TOTALS", {
+      x: margin + 15, y: y - 15, size: 10, font: fontBold, color: rgb(0.3, 0.3, 0.4),
     })
 
-    // Summary stats in a row
-    const statsY = y - 45
+    const statsY = y - 38
     const statWidth = (width - margin * 2 - 30) / 4
 
-    // Workers count
-    page.drawText(`${workers.length}`, {
-      x: margin + 15, y: statsY, size: 20, font: fontBold, color: rgb(0.1, 0.1, 0.2),
-    })
-    page.drawText("Workers", {
-      x: margin + 15, y: statsY - 15, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-    })
+    page.drawText(`${workers.length}`, { x: margin + 15, y: statsY, size: 18, font: fontBold, color: rgb(0.1, 0.1, 0.2) })
+    page.drawText("Workers", { x: margin + 15, y: statsY - 12, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
 
-    // Total hours
-    page.drawText(`${totalHours}`, {
-      x: margin + 15 + statWidth, y: statsY, size: 20, font: fontBold, color: rgb(0.1, 0.1, 0.2),
-    })
-    page.drawText("Total Hrs", {
-      x: margin + 15 + statWidth, y: statsY - 15, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-    })
+    page.drawText(`${totalHours}`, { x: margin + 15 + statWidth, y: statsY, size: 18, font: fontBold, color: rgb(0.1, 0.1, 0.2) })
+    page.drawText("Total Hrs", { x: margin + 15 + statWidth, y: statsY - 12, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
 
-    // ST/OT/DT breakdown
-    page.drawText(`${totalST}`, {
-      x: margin + 15 + statWidth * 2, y: statsY, size: 16, font: fontBold, color: rgb(0.2, 0.5, 0.3),
-    })
-    page.drawText("ST", {
-      x: margin + 15 + statWidth * 2, y: statsY - 15, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-    })
+    page.drawText(`${totalST}`, { x: margin + 15 + statWidth * 2, y: statsY, size: 14, font: fontBold, color: rgb(0.2, 0.5, 0.3) })
+    page.drawText("ST", { x: margin + 15 + statWidth * 2, y: statsY - 12, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
 
-    page.drawText(`${totalOT}`, {
-      x: margin + 15 + statWidth * 2.5, y: statsY, size: 16, font: fontBold, color: rgb(0.7, 0.5, 0.1),
-    })
-    page.drawText("OT", {
-      x: margin + 15 + statWidth * 2.5, y: statsY - 15, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-    })
+    page.drawText(`${totalOT}`, { x: margin + 15 + statWidth * 2.5, y: statsY, size: 14, font: fontBold, color: rgb(0.7, 0.5, 0.1) })
+    page.drawText("OT", { x: margin + 15 + statWidth * 2.5, y: statsY - 12, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
 
-    page.drawText(`${totalDT}`, {
-      x: margin + 15 + statWidth * 3, y: statsY, size: 16, font: fontBold, color: rgb(0.7, 0.2, 0.2),
-    })
-    page.drawText("DT", {
-      x: margin + 15 + statWidth * 3, y: statsY - 15, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
-    })
+    page.drawText(`${totalDT}`, { x: margin + 15 + statWidth * 3, y: statsY, size: 14, font: fontBold, color: rgb(0.7, 0.2, 0.2) })
+    page.drawText("DT", { x: margin + 15 + statWidth * 3, y: statsY - 12, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5) })
 
-    y -= 90
+    y -= 75
 
-    // Workers list
+    // ===== WORKER DETAILS =====
+    checkPageBreak(80)
     page.drawText("WORKER DETAILS", {
       x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
     })
-    y -= 20
+    y -= 18
 
     if (workers.length === 0) {
       page.drawText("No workers with hours this week.", {
-        x: margin + 10, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
+        x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
       })
       y -= 20
     } else {
       for (const worker of workers) {
-        if (y < margin + 120) break
+        checkPageBreak(20)
 
         page.drawText(`${sanitizeText(worker.name)} - ${worker.levelAbbr}`, {
-          x: margin + 10, y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1),
+          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1),
         })
-
         page.drawText(`${worker.totalHours} hrs`, {
           x: margin + 280, y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.2),
         })
-
         page.drawText(`(ST:${worker.totalST} OT:${worker.totalOT} DT:${worker.totalDT})`, {
           x: margin + 350, y, size: 8, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
         })
-
-        y -= 18
+        y -= 16
       }
     }
 
-    y -= 15
+    y -= 20
 
-    // Crew Summary section
-    if (crewSummary && y > margin + 100) {
-      page.drawText("CREW SUMMARY", {
+    // ===== EQUIPMENT USAGE (Grouped by Machine) =====
+    const equipmentByMachine = new Map<string, string[]>() // equipment -> dates used
+    for (const report of fieldReports) {
+      if (report.equipment && Array.isArray(report.equipment)) {
+        for (const eq of report.equipment) {
+          if (eq && eq.trim()) {
+            const eqName = sanitizeText(eq)
+            if (!equipmentByMachine.has(eqName)) {
+              equipmentByMachine.set(eqName, [])
+            }
+            equipmentByMachine.get(eqName)!.push(report.work_date)
+          }
+        }
+      }
+    }
+
+    if (equipmentByMachine.size > 0) {
+      checkPageBreak(60)
+      page.drawText("EQUIPMENT USAGE", {
         x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
       })
       y -= 18
 
-      const crewText = `Journeymen: ${crewSummary.jm} | APP1: ${crewSummary.app1} | APP2: ${crewSummary.app2} | APP3: ${crewSummary.app3}`
-      page.drawText(crewText, {
-        x: margin + 10, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
-      })
-      y -= 25
+      for (const [equipment, dates] of equipmentByMachine) {
+        checkPageBreak(35)
+        
+        page.drawText(equipment, {
+          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.2, 0.2, 0.2),
+        })
+        y -= 14
+
+        const datesList = dates.map(d => formatShortDate(d)).join(", ")
+        page.drawText(`• ${datesList}`, {
+          x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
+        })
+        y -= 16
+      }
+      y -= 10
     }
 
-    // Equipment section
-    if (equipment && equipment.length > 0 && y > margin + 80) {
-      page.drawText("EQUIPMENT USED", {
+    // ===== DAILY WORK SUMMARY =====
+    const reportsWithWork = fieldReports.filter(r => r.work_performed && r.work_performed.trim())
+    if (reportsWithWork.length > 0) {
+      checkPageBreak(60)
+      page.drawText("DAILY WORK SUMMARY", {
         x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
       })
       y -= 18
 
-      // Sanitize each equipment item
-      const sanitizedEquip = equipment.map(e => sanitizeText(e)).filter(e => e.length > 0)
-      const equipText = sanitizedEquip.join(", ")
-      const maxLen = 80
-      const displayEquip = equipText.length > maxLen ? equipText.substring(0, maxLen) + "..." : equipText
-      page.drawText(displayEquip, {
-        x: margin + 10, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
-      })
-      y -= 25
+      for (const report of reportsWithWork) {
+        checkPageBreak(40)
+
+        const dateLabel = formatShortDate(report.work_date)
+        page.drawText(dateLabel, {
+          x: margin + 15, y, size: 10, font: fontBold, color: rgb(0.2, 0.2, 0.2),
+        })
+        y -= 14
+
+        // Wrap long text
+        const workText = sanitizeText(report.work_performed)
+        const maxLineLen = 80
+        const lines: string[] = []
+        let remaining = workText
+        while (remaining.length > maxLineLen) {
+          let breakPoint = remaining.lastIndexOf(" ", maxLineLen)
+          if (breakPoint === -1) breakPoint = maxLineLen
+          lines.push(remaining.substring(0, breakPoint))
+          remaining = remaining.substring(breakPoint).trim()
+        }
+        if (remaining) lines.push(remaining)
+
+        for (const line of lines.slice(0, 3)) { // Max 3 lines per day
+          checkPageBreak(14)
+          page.drawText(`- ${line}`, {
+            x: margin + 25, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
+          })
+          y -= 12
+        }
+        y -= 6
+      }
+      y -= 10
     }
 
-    // Notes section
-    if (notes && y > margin + 50) {
-      page.drawText("NOTES", {
+    // ===== NOTES/PROBLEMS =====
+    const reportsWithNotes = fieldReports.filter(r => r.problems_notes && r.problems_notes.trim())
+    if (reportsWithNotes.length > 0) {
+      checkPageBreak(50)
+      page.drawText("NOTES & ISSUES", {
         x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
       })
       y -= 18
 
-      const sanitizedNotes = sanitizeText(notes)
-      const maxLen = 200
-      const displayNotes = sanitizedNotes.length > maxLen ? sanitizedNotes.substring(0, maxLen) + "..." : sanitizedNotes
-      page.drawText(displayNotes, {
-        x: margin + 10, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
-      })
+      for (const report of reportsWithNotes) {
+        checkPageBreak(30)
+        const dateLabel = formatShortDate(report.work_date)
+        const noteText = sanitizeText(report.problems_notes).substring(0, 100)
+        page.drawText(`${dateLabel}: ${noteText}`, {
+          x: margin + 15, y, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
+        })
+        y -= 14
+      }
+      y -= 10
     }
 
-    // Footer
+    // ===== PHOTOS SECTION =====
+    // Group photos by date
+    const photosByDate = new Map<string, ReportPhotoData[]>()
+    for (const photo of photos) {
+      if (!photosByDate.has(photo.work_date)) {
+        photosByDate.set(photo.work_date, [])
+      }
+      photosByDate.get(photo.work_date)!.push(photo)
+    }
+
+    if (photosByDate.size > 0) {
+      checkPageBreak(60)
+      page.drawText("PHOTOS", {
+        x: margin, y, size: 11, font: fontBold, color: rgb(0.2, 0.2, 0.3),
+      })
+      y -= 18
+
+      for (const [date, datePhotos] of photosByDate) {
+        checkPageBreak(30)
+        const dateLabel = formatShortDate(date)
+        page.drawText(`${dateLabel} - ${datePhotos.length} photo(s)`, {
+          x: margin + 15, y, size: 10, font: fontRegular, color: rgb(0.3, 0.3, 0.3),
+        })
+        y -= 14
+
+        // List photo captions if available
+        for (const photo of datePhotos.slice(0, 3)) {
+          if (photo.caption) {
+            checkPageBreak(14)
+            page.drawText(`• ${sanitizeText(photo.caption).substring(0, 60)}`, {
+              x: margin + 25, y, size: 8, font: fontRegular, color: rgb(0.5, 0.5, 0.5),
+            })
+            y -= 12
+          }
+        }
+        y -= 6
+      }
+    }
+
+    // ===== FOOTER =====
     page.drawText(`Generated: ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`, {
       x: margin, y: margin, size: 8, font: fontRegular, color: rgb(0.6, 0.6, 0.6),
     })
