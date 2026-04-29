@@ -104,12 +104,14 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
-      {/* Header - Ahern Branding */}
+      {/* Header - Ahern Branding with Logo */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary border border-primary/30">
-            <HardHat className="h-6 w-6 text-primary" />
-          </div>
+          <img
+            src="/ahern-logo.jpg"
+            alt="Ahern Painting Contractors Inc."
+            className="h-12 w-12 rounded-xl object-cover border-2 border-primary/50"
+          />
           <div className="flex-1">
             <h1 className="text-lg font-bold text-primary">Ahern Painting Contractors Inc.</h1>
             <p className="text-xs text-muted-foreground">Welcome, {supervisorName}</p>

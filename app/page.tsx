@@ -77,25 +77,23 @@ export default function CrewTimesheetApp() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#16382B",
+          backgroundColor: "#0B1F17",
           padding: "1rem",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
-          <div
+          {/* Logo */}
+          <img
+            src="/ahern-logo.jpg"
+            alt="Ahern Painting Contractors Inc."
             style={{
-              width: "4rem",
-              height: "4rem",
+              width: "5rem",
+              height: "5rem",
               borderRadius: "1rem",
-              backgroundColor: "#1F4D3A",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              objectFit: "cover",
               border: "2px solid #C9A646",
             }}
-          >
-            <HardHat style={{ height: "2rem", width: "2rem", color: "#C9A646" }} />
-          </div>
+          />
 
           <div style={{ textAlign: "center" }}>
             <h1
@@ -108,7 +106,7 @@ export default function CrewTimesheetApp() {
             >
               Ahern Painting Contractors Inc.
             </h1>
-            <p style={{ fontSize: "0.875rem", color: "#a1a1aa", margin: "0.5rem 0 0 0" }}>
+            <p style={{ fontSize: "0.875rem", color: "#A7B0A8", margin: "0.5rem 0 0 0" }}>
               Crew Timesheet
             </p>
           </div>
@@ -122,7 +120,7 @@ export default function CrewTimesheetApp() {
                 animation: "spin 1s linear infinite",
               }}
             />
-            <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#a1a1aa", margin: 0 }}>
+            <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#A7B0A8", margin: 0 }}>
               Loading crew data...
             </p>
           </div>

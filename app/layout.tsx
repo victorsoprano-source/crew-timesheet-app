@@ -41,13 +41,13 @@ export default function RootLayout({
         <style dangerouslySetInnerHTML={{ __html: `
           /* Ahern Painting Contractors Inc. - Base dark theme colors */
           html, body {
-            background-color: #16382B !important;
-            color: #fafafa !important;
+            background-color: #0B1F17 !important;
+            color: #F5F1E8 !important;
             font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           }
           html.dark, html.dark body {
-            background-color: #16382B !important;
-            color: #fafafa !important;
+            background-color: #0B1F17 !important;
+            color: #F5F1E8 !important;
           }
           /* Hide content until CSS is fully loaded */
           .css-loading-guard {
