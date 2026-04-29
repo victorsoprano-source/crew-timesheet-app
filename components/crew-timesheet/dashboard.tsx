@@ -107,11 +107,26 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
       {/* Header - Ahern Branding with Logo */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <img
-            src="/ahern-logo.jpg"
-            alt="Ahern Painting Contractors Inc."
-            className="h-12 w-12 rounded-xl object-cover border-2 border-primary/50"
-          />
+          {/* Geometric A Logo */}
+          <div className="h-12 w-12 rounded-xl bg-[#102A20] border border-[#1F4D3A] flex items-center justify-center">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              {/* Geometric A shape */}
+              <path
+                d="M12 3L3 21H7.5L9 17H15L16.5 21H21L12 3Z"
+                fill="#C9A646"
+              />
+              <path
+                d="M10.5 13L12 9L13.5 13H10.5Z"
+                fill="#102A20"
+              />
+            </svg>
+          </div>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-primary">Ahern Painting Contractors Inc.</h1>
             <p className="text-xs text-muted-foreground">Welcome, {supervisorName}</p>
