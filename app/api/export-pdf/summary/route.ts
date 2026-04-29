@@ -246,21 +246,32 @@ async function generateSummaryPDF(
       y -= 15
     }
 
-    // ===== HEADER =====
-    page.drawText("WEEKLY SUMMARY REPORT", {
-      x: margin, y, size: 18, font: fontBold, color: rgb(0.1, 0.1, 0.2),
+    // ===== HEADER with Ahern Branding =====
+    // Green header bar
+    page.drawRectangle({
+      x: 0,
+      y: height - 60,
+      width: width,
+      height: 60,
+      color: rgb(0.12, 0.30, 0.23), // #1F4D3A deep green
     })
-    y -= 25
+    
+    // Company name in gold
+    page.drawText("AHERN PAINTING CONTRACTORS INC.", {
+      x: margin, y: height - 38, size: 16, font: fontBold, color: rgb(0.79, 0.65, 0.27), // #C9A646 gold
+    })
+    
+    y = height - 85
 
-    page.drawText("Ahern Painting Cont., Inc.", {
-      x: margin, y, size: 12, font: fontBold, color: rgb(0.3, 0.3, 0.3),
+    page.drawText("WEEKLY SUMMARY REPORT", {
+      x: margin, y, size: 14, font: fontBold, color: rgb(0.12, 0.30, 0.23),
     })
-    y -= 18
+    y -= 22
 
     page.drawText("Job: C34921R", {
       x: margin, y, size: 11, font: fontRegular, color: rgb(0.4, 0.4, 0.4),
     })
-    y -= 22
+    y -= 20
 
     // Week dates
     const startFmt = new Date(weekStart + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" })

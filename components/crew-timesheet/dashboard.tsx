@@ -104,18 +104,20 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
-          <HardHat className="h-6 w-6 text-primary" />
+      {/* Header - Ahern Branding */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary border border-primary/30">
+            <HardHat className="h-6 w-6 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-primary">Ahern Painting Contractors Inc.</h1>
+            <p className="text-xs text-muted-foreground">Welcome, {supervisorName}</p>
+          </div>
         </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-foreground">Crew Timesheet</h1>
-          <p className="text-sm text-muted-foreground">Welcome, {supervisorName}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-muted-foreground">Current Week</p>
-          <p className="text-sm font-medium text-foreground">{formatWeekRange()}</p>
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm font-medium text-foreground">Crew Timesheet</p>
+          <p className="text-sm font-medium text-muted-foreground">{formatWeekRange()}</p>
         </div>
       </div>
 

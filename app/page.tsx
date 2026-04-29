@@ -77,7 +77,7 @@ export default function CrewTimesheetApp() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#1a1b2e",
+          backgroundColor: "#16382B",
           padding: "1rem",
         }}
       >
@@ -87,32 +87,38 @@ export default function CrewTimesheetApp() {
               width: "4rem",
               height: "4rem",
               borderRadius: "1rem",
-              backgroundColor: "#5b8def",
+              backgroundColor: "#1F4D3A",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              border: "2px solid #C9A646",
             }}
           >
-            <HardHat style={{ height: "2rem", width: "2rem", color: "#ffffff" }} />
+            <HardHat style={{ height: "2rem", width: "2rem", color: "#C9A646" }} />
           </div>
 
-          <h1
-            style={{
-              fontSize: "1.5rem",
-              fontWeight: 700,
-              color: "#fafafa",
-              margin: 0,
-            }}
-          >
-            Crew Timesheet
-          </h1>
+          <div style={{ textAlign: "center" }}>
+            <h1
+              style={{
+                fontSize: "1.25rem",
+                fontWeight: 700,
+                color: "#C9A646",
+                margin: 0,
+              }}
+            >
+              Ahern Painting Contractors Inc.
+            </h1>
+            <p style={{ fontSize: "0.875rem", color: "#a1a1aa", margin: "0.5rem 0 0 0" }}>
+              Crew Timesheet
+            </p>
+          </div>
 
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginTop: "1rem" }}>
             <Loader2
               style={{
                 height: "1.5rem",
                 width: "1.5rem",
-                color: "#5b8def",
+                color: "#C9A646",
                 animation: "spin 1s linear infinite",
               }}
             />

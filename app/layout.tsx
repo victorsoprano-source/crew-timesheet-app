@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Crew Timesheet',
-  description: 'Construction crew management and timesheet tracking',
+  title: 'Ahern Painting Contractors Inc.',
+  description: 'Crew management and timesheet tracking',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -39,14 +39,14 @@ export default function RootLayout({
       <head>
         {/* Critical inline styles to prevent flash of unstyled content */}
         <style dangerouslySetInnerHTML={{ __html: `
-          /* Base dark theme colors */
+          /* Ahern Painting Contractors Inc. - Base dark theme colors */
           html, body {
-            background-color: #1a1b2e !important;
+            background-color: #16382B !important;
             color: #fafafa !important;
             font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           }
           html.dark, html.dark body {
-            background-color: #1a1b2e !important;
+            background-color: #16382B !important;
             color: #fafafa !important;
           }
           /* Hide content until CSS is fully loaded */
