@@ -226,15 +226,17 @@ export function CrewList({ onNavigate }: CrewListProps) {
       
       const formDataUpload = new FormData()
       formDataUpload.append('file', processedFile)
+      formDataUpload.append('type', 'certificate')
       formDataUpload.append('workerId', editingWorker?.id || 'unknown')
       formDataUpload.append('certType', newCertForm.certificationType || 'certificate')
       
-      const response = await fetch('/api/upload-certificate', {
+      const response = await fetch('/api/upload', {
         method: 'POST',
         body: formDataUpload,
       })
 
       const result = await response.json()
+      console.log("[v0] UPLOAD RESULT:", result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Upload failed')

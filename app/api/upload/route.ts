@@ -8,52 +8,78 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
+    
+    // Support both daily-reports and certificate uploads
+    const uploadType = formData.get('type') as string | null // 'certificate' or 'report' (default)
     const workDate = formData.get('workDate') as string | null
     const indexParam = formData.get('index') as string | null
     const index = indexParam ? parseInt(indexParam, 10) : 0
+    const workerId = formData.get('workerId') as string | null
+    const certType = formData.get('certType') as string | null
+
+    console.log("[v0] UPLOAD REQUEST:", { 
+      hasFile: !!file, 
+      fileType: file?.type, 
+      fileSize: file?.size,
+      uploadType,
+      workDate,
+      index,
+      workerId,
+      certType
+    })
 
     if (!file) {
+      console.log("[v0] UPLOAD ERROR: No file provided")
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Validate that we have a proper File object
     if (!(file instanceof File)) {
+      console.log("[v0] UPLOAD ERROR: Invalid file format")
       return NextResponse.json({ error: 'Invalid file format' }, { status: 400 })
     }
 
-    // Validate file type - client-side conversion should always send JPEG
-    // But we also accept PNG/GIF/WebP as fallback
     if (!file.type.startsWith('image/')) {
+      console.log("[v0] UPLOAD ERROR: Not an image file")
       return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 })
     }
 
-    // Validate file size (max 10MB - already compressed on client)
     if (file.size > 10 * 1024 * 1024) {
+      console.log("[v0] UPLOAD ERROR: File too large")
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 })
     }
 
-    // Create Supabase client with service role for storage access
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.log("[v0] UPLOAD ERROR: Missing Supabase config")
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Generate storage path: daily-reports/{date}/photo-{timestamp}-{index}.jpg
+    // Generate storage path based on upload type
     const timestamp = Date.now()
-    const reportDate = workDate || new Date().toISOString().split('T')[0]
+    let storagePath: string
     
-    // Always use .jpg extension since client converts to JPEG
-    const storagePath = `daily-reports/${reportDate}/photo-${timestamp}-${index}.jpg`
+    if (uploadType === 'certificate') {
+      // Certificate photo path: worker-certificates/{workerId}/{certType}/cert-{timestamp}.jpg
+      const safeWorkerId = workerId || 'unknown'
+      const safeCertType = (certType || 'certificate').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase()
+      storagePath = `worker-certificates/${safeWorkerId}/${safeCertType}/cert-${timestamp}.jpg`
+    } else {
+      // Daily report photo path: daily-reports/{date}/photo-{timestamp}-{index}.jpg
+      const reportDate = workDate || new Date().toISOString().split('T')[0]
+      storagePath = `daily-reports/${reportDate}/photo-${timestamp}-${index}.jpg`
+    }
 
-    // Convert File to ArrayBuffer for upload
+    console.log("[v0] UPLOAD PATH:", storagePath)
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = new Uint8Array(arrayBuffer)
 
-    // Upload to Supabase Storage (public bucket)
+    console.log("[v0] UPLOADING TO SUPABASE STORAGE...")
+
     const { data, error } = await supabase.storage
       .from('reports')
       .upload(storagePath, buffer, {
@@ -62,22 +88,26 @@ export async function POST(request: NextRequest) {
       })
 
     if (error) {
-      console.error('Supabase upload error:', error)
+      console.log("[v0] SUPABASE UPLOAD ERROR:", error.message)
       return NextResponse.json({ error: `Upload failed: ${error.message}` }, { status: 500 })
     }
 
-    // Get public URL
+    console.log("[v0] UPLOAD SUCCESS, path:", data.path)
+
     const { data: urlData } = supabase.storage
       .from('reports')
       .getPublicUrl(storagePath)
 
-    // Return the pathname (for database) and public URL
-    return NextResponse.json({ 
+    const result = { 
       pathname: data.path,
       url: urlData.publicUrl,
-    })
+    }
+    
+    console.log("[v0] UPLOAD RESULT:", result)
+
+    return NextResponse.json(result)
   } catch (error) {
-    console.error('Upload error:', error)
+    console.log("[v0] UPLOAD EXCEPTION:", error)
     const errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
