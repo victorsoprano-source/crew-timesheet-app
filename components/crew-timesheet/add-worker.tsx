@@ -105,9 +105,23 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
   const handlePhotoUpload = async (file: File) => {
     setIsUploadingPhoto(true)
     
+    // Log original file type
+    console.log("[v0] Original file type:", file.type)
+    
     try {
+      // Convert to JPEG (strips EXIF, resizes to max 1280px)
+      const { prepareImageForUpload } = await import("@/lib/image-utils")
+      const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, 0)
+      
+      if (conversionError || !processedFile) {
+        throw new Error(conversionError || 'Failed to process image')
+      }
+      
+      // Log processed file type
+      console.log("[v0] Processed file type:", processedFile.type)
+      
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', processedFile)
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -115,6 +129,7 @@ export function AddWorker({ onSuccess }: AddWorkerProps) {
       })
 
       const result = await response.json()
+      console.log("[v0] UPLOAD RESULT:", result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Upload failed')

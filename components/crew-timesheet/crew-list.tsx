@@ -147,9 +147,23 @@ export function CrewList({ onNavigate }: CrewListProps) {
   const handleEditPhotoUpload = async (file: File) => {
     setIsUploadingEditPhoto(true)
     
+    // Log original file type
+    console.log("[v0] Original file type:", file.type)
+    
     try {
+      // Convert to JPEG (strips EXIF, resizes to max 1280px)
+      const { prepareImageForUpload } = await import("@/lib/image-utils")
+      const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, 0)
+      
+      if (conversionError || !processedFile) {
+        throw new Error(conversionError || 'Failed to process image')
+      }
+      
+      // Log processed file type
+      console.log("[v0] Processed file type:", processedFile.type)
+      
       const formDataUpload = new FormData()
-      formDataUpload.append('file', file)
+      formDataUpload.append('file', processedFile)
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -157,6 +171,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
       })
 
       const result = await response.json()
+      console.log("[v0] UPLOAD RESULT:", result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Upload failed')
@@ -164,8 +179,10 @@ export function CrewList({ onNavigate }: CrewListProps) {
 
       setEditPhotoPathname(result.pathname)
       setEditPhotoPreviewUrl(`/api/file?pathname=${encodeURIComponent(result.pathname)}`)
+      toast.success("Photo uploaded successfully")
     } catch (err) {
-      console.error("Edit photo upload error:", err)
+      const errorMsg = err instanceof Error ? err.message : 'Upload failed'
+      toast.error(`Photo upload failed: ${errorMsg}`)
     } finally {
       setIsUploadingEditPhoto(false)
     }
@@ -215,14 +232,20 @@ export function CrewList({ onNavigate }: CrewListProps) {
   const handleCertPhotoUpload = async (file: File) => {
     setIsUploadingCertPhoto(true)
     
+    // Log original file type
+    console.log("[v0] Original file type:", file.type)
+    
     try {
-      // Convert to JPEG using the image utils
+      // Convert to JPEG using the image utils (strips EXIF, resizes to max 1280px)
       const { prepareImageForUpload } = await import("@/lib/image-utils")
       const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, 0)
       
       if (conversionError || !processedFile) {
         throw new Error(conversionError || 'Failed to process image')
       }
+      
+      // Log processed file type
+      console.log("[v0] Processed file type:", processedFile.type)
       
       const formDataUpload = new FormData()
       formDataUpload.append('file', processedFile)

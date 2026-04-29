@@ -7,8 +7,8 @@
  * Maximum dimensions for uploaded images
  * Larger images will be scaled down proportionally
  */
-const MAX_WIDTH = 2048
-const MAX_HEIGHT = 2048
+const MAX_WIDTH = 1280
+const MAX_HEIGHT = 1280
 const JPEG_QUALITY = 0.85
 
 /**
