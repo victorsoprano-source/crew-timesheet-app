@@ -121,6 +121,69 @@ export const CERTIFICATION_TYPES: CertificationType[] = [
     shortLabel: "CDL",
     legacyNames: ["CDL"],
   },
+  // New certifications added
+  {
+    id: "lead-8hr",
+    name: "8-hr Lead Awareness Training",
+    shortLabel: "Lead 8hr",
+  },
+  {
+    id: "flagger",
+    name: "Flagger Certification",
+    shortLabel: "Flagger",
+  },
+  {
+    id: "forklift-operator",
+    name: "Forklift Operator",
+    shortLabel: "Forklift",
+    legacyNames: ["Forklift Certified"],
+  },
+  {
+    id: "mewp",
+    name: "MEWP Operator",
+    shortLabel: "MEWP",
+  },
+  {
+    id: "susp-scaffold",
+    name: "16-hr Suspended Scaffold (SCA-301)",
+    shortLabel: "Susp. Scaffold",
+  },
+  {
+    id: "driver-license",
+    name: "Driver License",
+    shortLabel: "Driver License",
+  },
+  {
+    id: "fire-guard",
+    name: "Fire Guard For Torch Operator",
+    shortLabel: "Fire Guard",
+  },
+  {
+    id: "confined-8hr",
+    name: "8-hr Confined Space",
+    shortLabel: "Confined 8hr",
+    legacyNames: ["Confined Space"],
+  },
+  {
+    id: "mta-catenary",
+    name: "MTA-NYCT CPM Catenary Scaffold",
+    shortLabel: "MTA Catenary",
+  },
+  {
+    id: "twp-16hr",
+    name: "16-hr Temporary Work Platform Course",
+    shortLabel: "TWP 16hr",
+  },
+  {
+    id: "nj-lead",
+    name: "New Jersey Lead",
+    shortLabel: "NJ Lead",
+  },
+  {
+    id: "twic",
+    name: "TWIC",
+    shortLabel: "TWIC",
+  },
   {
     id: "other",
     name: "Other",
