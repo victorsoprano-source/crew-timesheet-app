@@ -1068,11 +1068,18 @@ export function CrewList({ onNavigate }: CrewListProps) {
                         type="button"
                         size="sm"
                         onClick={handleAddCertification}
-                        disabled={!newCertForm.certificationType || !newCertForm.expirationDate || isSavingCert}
+                        disabled={
+                          !newCertForm.certificationType ||
+                          !newCertForm.expirationDate ||
+                          isSavingCert ||
+                          isUploadingCertPhoto
+                        }
                         className="flex-1 bg-primary text-primary-foreground"
                       >
                         {isSavingCert ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : isUploadingCertPhoto ? (
+                          "Uploading..."
                         ) : (
                           "Add Certification"
                         )}
