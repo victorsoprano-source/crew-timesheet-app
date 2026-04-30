@@ -9,7 +9,7 @@ import { DailyReports } from "@/components/crew-timesheet/daily-reports"
 import { Certifications } from "@/components/crew-timesheet/certifications"
 import { BottomNav } from "@/components/crew-timesheet/bottom-nav"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Loader2, HardHat } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 
 export default function CrewTimesheetApp() {
   const [appReady, setAppReady] = useState(false)
@@ -71,8 +71,6 @@ export default function CrewTimesheetApp() {
       <div
         style={{
           minHeight: "100vh",
-          maxWidth: "28rem",
-          margin: "0 auto",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -82,48 +80,24 @@ export default function CrewTimesheetApp() {
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
-          {/* Logo */}
           <img
-            src="/ahern-logo.jpg"
-            alt="Ahern Painting Contractors Inc."
+            src="/ahern-intro.png"
+            alt="Ahern Intro"
             style={{
-              width: "5rem",
-              height: "5rem",
-              borderRadius: "1rem",
+              width: "240px",
+              height: "240px",
+              borderRadius: "24px",
               objectFit: "cover",
-              border: "2px solid #C9A646",
             }}
           />
-
-          <div style={{ textAlign: "center" }}>
-            <h1
-              style={{
-                fontSize: "1.25rem",
-                fontWeight: 700,
-                color: "#C9A646",
-                margin: 0,
-              }}
-            >
-              Ahern Painting Contractors Inc.
-            </h1>
-            <p style={{ fontSize: "0.875rem", color: "#A7B0A8", margin: "0.5rem 0 0 0" }}>
-              Crew Timesheet
-            </p>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginTop: "1rem" }}>
-            <Loader2
-              style={{
-                height: "1.5rem",
-                width: "1.5rem",
-                color: "#C9A646",
-                animation: "spin 1s linear infinite",
-              }}
-            />
-            <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#A7B0A8", margin: 0 }}>
-              Loading crew data...
-            </p>
-          </div>
+          <Loader2
+            style={{
+              height: "1.5rem",
+              width: "1.5rem",
+              color: "#C9A646",
+              animation: "spin 1s linear infinite",
+            }}
+          />
         </div>
       </div>
     )
