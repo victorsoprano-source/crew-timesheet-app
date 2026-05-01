@@ -3,75 +3,107 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Ahern Painting Contractors Inc. - Premium Construction Theme
+   Dark green + black + gold color scheme
+   
+   Primary background: #0B1F17
+   Card background: #102A20
+   Secondary green: #16382B
+   Gold accent: #C9A646
+   Text: #F5F1E8
+   Muted text: #A7B0A8
+*/
+
 :root {
-  --background: oklch(0.12 0.02 255);
-  --foreground: oklch(0.98 0 0);
-  --card: oklch(0.18 0.025 255);
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.18 0.025 255);
-  --popover-foreground: oklch(0.98 0 0);
-  --primary: oklch(0.65 0.15 220);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.22 0.03 255);
-  --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.25 0.02 255);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.55 0.18 145);
-  --accent-foreground: oklch(0.98 0 0);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.28 0.03 255);
-  --input: oklch(0.22 0.025 255);
-  --ring: oklch(0.65 0.15 220);
-  --chart-1: oklch(0.65 0.15 220);
-  --chart-2: oklch(0.55 0.18 145);
-  --chart-3: oklch(0.65 0.15 45);
-  --chart-4: oklch(0.6 0.2 280);
-  --chart-5: oklch(0.7 0.15 180);
+  /* Backgrounds - Deep construction green */
+  --background: #0B1F17;
+  --foreground: #F5F1E8;
+  
+  /* Cards - Slightly lighter green */
+  --card: #102A20;
+  --card-foreground: #F5F1E8;
+  
+  --popover: #102A20;
+  --popover-foreground: #F5F1E8;
+  
+  /* Primary = Gold accent */
+  --primary: #C9A646;
+  --primary-foreground: #0B1F17;
+  
+  /* Secondary = Medium green */
+  --secondary: #16382B;
+  --secondary-foreground: #F5F1E8;
+  
+  /* Muted */
+  --muted: #16382B;
+  --muted-foreground: #A7B0A8;
+  
+  /* Accent = Gold */
+  --accent: #C9A646;
+  --accent-foreground: #0B1F17;
+  
+  /* Destructive */
+  --destructive: #DC2626;
+  --destructive-foreground: #F5F1E8;
+  
+  /* Borders and inputs */
+  --border: #1F4D3A;
+  --input: #16382B;
+  --ring: #C9A646;
+  
+  /* Charts - Green/Gold palette */
+  --chart-1: #C9A646;
+  --chart-2: #1F4D3A;
+  --chart-3: #A7B0A8;
+  --chart-4: #16382B;
+  --chart-5: #D4B84A;
+  
   --radius: 0.75rem;
-  --sidebar: oklch(0.15 0.025 255);
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.65 0.15 220);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.22 0.03 255);
-  --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(0.28 0.03 255);
-  --sidebar-ring: oklch(0.65 0.15 220);
+  
+  /* Sidebar */
+  --sidebar: #102A20;
+  --sidebar-foreground: #F5F1E8;
+  --sidebar-primary: #C9A646;
+  --sidebar-primary-foreground: #0B1F17;
+  --sidebar-accent: #16382B;
+  --sidebar-accent-foreground: #F5F1E8;
+  --sidebar-border: #1F4D3A;
+  --sidebar-ring: #C9A646;
 }
 
 .dark {
-  --background: oklch(0.12 0.02 255);
-  --foreground: oklch(0.98 0 0);
-  --card: oklch(0.18 0.025 255);
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.18 0.025 255);
-  --popover-foreground: oklch(0.98 0 0);
-  --primary: oklch(0.65 0.15 220);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.22 0.03 255);
-  --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.25 0.02 255);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.55 0.18 145);
-  --accent-foreground: oklch(0.98 0 0);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.28 0.03 255);
-  --input: oklch(0.22 0.025 255);
-  --ring: oklch(0.65 0.15 220);
-  --chart-1: oklch(0.65 0.15 220);
-  --chart-2: oklch(0.55 0.18 145);
-  --chart-3: oklch(0.65 0.15 45);
-  --chart-4: oklch(0.6 0.2 280);
-  --chart-5: oklch(0.7 0.15 180);
-  --sidebar: oklch(0.15 0.025 255);
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.65 0.15 220);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.22 0.03 255);
-  --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(0.28 0.03 255);
-  --sidebar-ring: oklch(0.65 0.15 220);
+  --background: #0B1F17;
+  --foreground: #F5F1E8;
+  --card: #102A20;
+  --card-foreground: #F5F1E8;
+  --popover: #102A20;
+  --popover-foreground: #F5F1E8;
+  --primary: #C9A646;
+  --primary-foreground: #0B1F17;
+  --secondary: #16382B;
+  --secondary-foreground: #F5F1E8;
+  --muted: #16382B;
+  --muted-foreground: #A7B0A8;
+  --accent: #C9A646;
+  --accent-foreground: #0B1F17;
+  --destructive: #DC2626;
+  --destructive-foreground: #F5F1E8;
+  --border: #1F4D3A;
+  --input: #16382B;
+  --ring: #C9A646;
+  --chart-1: #C9A646;
+  --chart-2: #1F4D3A;
+  --chart-3: #A7B0A8;
+  --chart-4: #16382B;
+  --chart-5: #D4B84A;
+  --sidebar: #102A20;
+  --sidebar-foreground: #F5F1E8;
+  --sidebar-primary: #C9A646;
+  --sidebar-primary-foreground: #0B1F17;
+  --sidebar-accent: #16382B;
+  --sidebar-accent-foreground: #F5F1E8;
+  --sidebar-border: #1F4D3A;
+  --sidebar-ring: #C9A646;
 }
 
 @theme inline {
@@ -122,4 +154,34 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Spinner animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Safe area padding for mobile */
+.safe-area-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B1F17;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1F4D3A;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C9A646;
 }

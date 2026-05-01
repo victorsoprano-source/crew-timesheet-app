@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { CostCodeAutocomplete } from "@/components/ui/cost-code-autocomplete"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronLeft, ChevronRight, Save, Plus, Trash2, Loader2, CheckCircle, Camera, X, ImageIcon } from "lucide-react"
-import { getWorkers, type Worker } from "@/app/actions/workers"
+import { getWorkers, getActiveWorkers, type Worker } from "@/app/actions/workers"
 import { 
   getOrCreateTimesheet, 
   getTimesheetEntriesForDay, 
@@ -64,9 +65,55 @@ interface TimesheetEntry {
 const trades = ["Electrician", "Plumber", "Carpenter", "Mason", "Welder", "Laborer", "Foreman", "Operator", "HVAC Technician", "Painter", "Heavy Equipment Operator"]
 const statuses: ("Present" | "Absent" | "Late")[] = ["Present", "Absent", "Late"]
 
+// Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
+// Returns the index only - caller must verify if today is within the target week
+const getTodayIndexInWeek = () => {
+  const today = new Date()
+  const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+  // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+  const dayMap: Record<number, number> = { 3: 0, 4: 1, 5: 2, 6: 3, 0: 4, 1: 5, 2: 6 }
+  return dayMap[dayOfWeek] ?? 0
+}
+
+// Check if today's date falls within a given week (by weekStart string YYYY-MM-DD)
+const isTodayInWeek = (weekStartStr: string): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayStr = today.toISOString().split("T")[0]
+  
+  const weekStart = new Date(weekStartStr + "T00:00:00")
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6) // Wed to Tue = 7 days
+  
+  const weekStartDate = weekStart.toISOString().split("T")[0]
+  const weekEndDate = weekEnd.toISOString().split("T")[0]
+  
+  return todayStr >= weekStartDate && todayStr <= weekEndDate
+}
+
+// Get the smart default day index for a given week
+// If today is in the week, select today. Otherwise, select Wednesday (index 0)
+const getSmartDefaultDayIndex = (weekStartStr: string): number => {
+  if (isTodayInWeek(weekStartStr)) {
+    return getTodayIndexInWeek()
+  }
+  return 0 // Default to Wednesday
+}
+
 export function Timesheet() {
   const [weekOffset, setWeekOffset] = useState(0)
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0)
+  const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
+    // On initial render, select today if it's in the current week
+    // Calculate current week's start date
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const wednesday = new Date(today)
+    const diff = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4
+    wednesday.setDate(today.getDate() - diff)
+    wednesday.setHours(0, 0, 0, 0)
+    const weekStartStr = wednesday.toISOString().split("T")[0]
+    return getSmartDefaultDayIndex(weekStartStr)
+  })
   const [entries, setEntries] = useState<TimesheetEntry[]>([])
   const [workers, setWorkers] = useState<Worker[]>([])
   const [currentTimesheet, setCurrentTimesheet] = useState<TimesheetType | null>(null)
@@ -144,6 +191,7 @@ export function Timesheet() {
       const dayEntries = await getTimesheetEntriesForDay(currentTimesheet.id, selectedDay.date)
       
       if (dayEntries.length > 0) {
+        // Day has saved entries - load them
         const mappedEntries: TimesheetEntry[] = dayEntries.map((e) => ({
           id: e.id,
           worker_id: e.worker_id,
@@ -159,7 +207,27 @@ export function Timesheet() {
         }))
         setEntries(mappedEntries)
       } else {
-        setEntries([])
+        // No entries for this day - auto-populate with active workers
+        const activeWorkers = await getActiveWorkers()
+        
+        if (activeWorkers.length > 0) {
+          const autoEntries: TimesheetEntry[] = activeWorkers.map((worker) => ({
+            id: `temp-${worker.id}-${Date.now()}`,
+            worker_id: worker.id,
+            name: worker.name,
+            trade: worker.trade,
+            regular: "",
+            overtime: "",
+            doubleTime: "",
+            status: "Present" as const,
+            jobCode: "",
+            photoRefId: "",
+            notes: "",
+          }))
+          setEntries(autoEntries)
+        } else {
+          setEntries([])
+        }
       }
     } catch (err) {
       // Don't show error - just show empty entries
@@ -171,7 +239,8 @@ export function Timesheet() {
 
   useEffect(() => {
     loadWeekData()
-    setSelectedDayIndex(0)
+    // When week changes, select today if it's in the new week, otherwise Wednesday
+    setSelectedDayIndex(getSmartDefaultDayIndex(weekStartStr))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
 
@@ -256,19 +325,23 @@ return { ...e, [field]: value }
     input.click()
   }
 
-  const getPhotoUrl = (pathname: string) => {
+  const getPhotoUrl = (pathname: string | null | undefined) => {
+    if (!pathname) return null
+    if (pathname.startsWith("http")) return pathname
+    // Route through API which handles both Vercel Blob and Supabase Storage
     return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
+  // Add an extra worker (for workers not in the auto-loaded list)
   const addEntry = () => {
     const newEntry: TimesheetEntry = {
       id: `temp-${Date.now()}`,
       worker_id: "",
       name: "",
       trade: "",
-      regular: "0",
-      overtime: "0",
-      doubleTime: "0",
+      regular: "",
+      overtime: "",
+      doubleTime: "",
       status: "Present",
       jobCode: "",
       photoRefId: "",
@@ -504,8 +577,9 @@ return { ...e, [field]: value }
                     <label className="text-xs text-muted-foreground mb-1 block">ST</label>
                     <Input
                       type="number"
-                      value={entry.status === "Absent" ? 0 : parseFloat(entry.regular) || 0}
+                      value={entry.status === "Absent" ? "" : (entry.regular === "0" || entry.regular === "" ? "" : entry.regular)}
                       onChange={(e) => updateEntry(entry.id, "regular", e.target.value)}
+                      placeholder="0"
                       className={`bg-input border-border text-foreground text-center h-9 ${entry.status === "Absent" ? "opacity-50 cursor-not-allowed" : ""}`}
                       min="0"
                       step="0.5"
@@ -517,8 +591,9 @@ return { ...e, [field]: value }
                   <label className="text-xs text-muted-foreground mb-1 block">OT</label>
                   <Input
                     type="number"
-                    value={entry.status === "Absent" ? 0 : parseFloat(entry.overtime) || 0}
+                    value={entry.status === "Absent" ? "" : (entry.overtime === "0" || entry.overtime === "" ? "" : entry.overtime)}
                     onChange={(e) => updateEntry(entry.id, "overtime", e.target.value)}
+                    placeholder="0"
                     className={`bg-input border-border text-foreground text-center h-9 ${entry.status === "Absent" ? "opacity-50 cursor-not-allowed" : ""}`}
                     min="0"
                     step="0.5"
@@ -529,8 +604,9 @@ return { ...e, [field]: value }
                   <label className="text-xs text-muted-foreground mb-1 block">DT</label>
                   <Input
                     type="number"
-                    value={entry.status === "Absent" ? 0 : parseFloat(entry.doubleTime) || 0}
+                    value={entry.status === "Absent" ? "" : (entry.doubleTime === "0" || entry.doubleTime === "" ? "" : entry.doubleTime)}
                     onChange={(e) => updateEntry(entry.id, "doubleTime", e.target.value)}
+                    placeholder="0"
                     className={`bg-input border-border text-foreground text-center h-9 ${entry.status === "Absent" ? "opacity-50 cursor-not-allowed" : ""}`}
                     min="0"
                     step="0.5"
@@ -539,15 +615,15 @@ return { ...e, [field]: value }
                 </div>
               </div>
 
-              {/* Job Code and Photo */}
+              {/* Cost Code and Photo */}
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Job Code</label>
-                  <Input
-                    placeholder="e.g., JOB-001"
+                  <label className="text-xs text-muted-foreground mb-1 block">Cost Code</label>
+                  <CostCodeAutocomplete
                     value={entry.jobCode}
-                    onChange={(e) => updateEntry(entry.id, "jobCode", e.target.value)}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground h-9"
+                    onChange={(value) => updateEntry(entry.id, "jobCode", value)}
+                    placeholder="Search cost code..."
+                    className="bg-input border-border text-foreground placeholder:text-muted-foreground h-9 text-sm"
                   />
                 </div>
                 <div>
@@ -610,14 +686,16 @@ return { ...e, [field]: value }
 
           {entries.length === 0 && (
             <Card className="p-8 bg-card border-border text-center">
-              <p className="text-muted-foreground mb-4">No entries for {selectedDay?.dayName} yet.</p>
+              <p className="text-muted-foreground mb-4">
+                No active workers found. Add workers to your Crew List and mark them as Active.
+              </p>
               <Button 
                 variant="outline" 
                 className="border-border text-foreground hover:bg-secondary"
                 onClick={addEntry}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add First Entry
+                Add Worker Manually
               </Button>
             </Card>
           )}
@@ -633,7 +711,7 @@ return { ...e, [field]: value }
           disabled={availableWorkers.length === 0}
         >
           <Plus className="h-4 w-4 mr-2" />
-          Add Worker
+          Add Extra Worker
         </Button>
         <Button 
           className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"

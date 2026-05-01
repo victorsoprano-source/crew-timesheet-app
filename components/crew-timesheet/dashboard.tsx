@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, Clock, FileText, Plus, UserPlus, List, BarChart3, HardHat, Loader2 } from "lucide-react"
@@ -28,8 +29,16 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Default to Wednesday (index 0) - same as Reports default
-  const selectedDayIndex = 0
+  // Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
+  const getCurrentDayIndex = () => {
+    const today = new Date()
+    const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+    // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+    const dayMap: Record<number, number> = { 3: 0, 4: 1, 5: 2, 6: 3, 0: 4, 1: 5, 2: 6 }
+    return dayMap[dayOfWeek] ?? 0
+  }
+
+  const selectedDayIndex = getCurrentDayIndex()
 
   const loadData = async () => {
     setIsLoading(true)
@@ -71,7 +80,6 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
   const statCards = [
     { label: "Workers Today", value: stats.workersToday.toString(), icon: Users, color: "text-primary" },
     { label: "Total Hours", value: stats.hoursLogged.toString(), icon: Clock, color: "text-accent" },
-    { label: "ST / OT / DT", value: `${stats.totalST}/${stats.totalOT}/${stats.totalDT}`, icon: FileText, color: "text-chart-3" },
   ]
 
   const actions = [
@@ -97,18 +105,27 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
-          <HardHat className="h-6 w-6 text-primary" />
+      {/* Header - Ahern Branding with Logo */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <Image
+            src="/logo.png"
+            alt="Ahern Painting Contractors Inc."
+            width={48}
+            height={48}
+            style={{
+              borderRadius: "12px",
+              objectFit: "cover"
+            }}
+          />
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-primary">Ahern Painting Contractors Inc.</h1>
+            <p className="text-xs text-muted-foreground">Welcome, {supervisorName}</p>
+          </div>
         </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-foreground">Crew Timesheet</h1>
-          <p className="text-sm text-muted-foreground">Welcome, {supervisorName}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-muted-foreground">Current Week</p>
-          <p className="text-sm font-medium text-foreground">{formatWeekRange()}</p>
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm font-medium text-foreground">Crew Timesheet</p>
+          <p className="text-sm font-medium text-muted-foreground">{formatWeekRange()}</p>
         </div>
       </div>
 
@@ -126,6 +143,39 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
             )}
           </Card>
         ))}
+        
+        {/* Hours Breakdown Card - ST/OT/DT */}
+        <Card className="flex flex-col p-4 bg-card border-border relative">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-4 w-4 text-chart-3" />
+            <span className="text-xs font-medium text-muted-foreground">Hours Breakdown</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {/* Straight Time */}
+            <div className="flex flex-col items-center justify-center bg-muted/30 rounded-lg py-2 px-1">
+              <span className="text-base sm:text-lg font-bold text-foreground tabular-nums">{stats.totalST}</span>
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mt-0.5">ST</span>
+              <span className="text-[8px] text-muted-foreground/70 hidden sm:block">Straight</span>
+            </div>
+            {/* Overtime */}
+            <div className="flex flex-col items-center justify-center bg-muted/30 rounded-lg py-2 px-1">
+              <span className="text-base sm:text-lg font-bold text-chart-2 tabular-nums">{stats.totalOT}</span>
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mt-0.5">OT</span>
+              <span className="text-[8px] text-muted-foreground/70 hidden sm:block">Overtime</span>
+            </div>
+            {/* Double Time */}
+            <div className="flex flex-col items-center justify-center bg-muted/30 rounded-lg py-2 px-1">
+              <span className="text-base sm:text-lg font-bold text-chart-3 tabular-nums">{stats.totalDT}</span>
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mt-0.5">DT</span>
+              <span className="text-[8px] text-muted-foreground/70 hidden sm:block">Double</span>
+            </div>
+          </div>
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-card/50 rounded-lg">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </Card>
       </div>
 
       {/* Daily Attendance Breakdown */}

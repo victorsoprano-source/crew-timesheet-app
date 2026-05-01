@@ -28,7 +28,10 @@ export interface DailyFieldReport {
   work_date: string
   work_performed: string | null
   journeyman_count: number
-  apprentice_count: number
+  apprentice_count: number // Legacy field
+  apprentice_year1_count: number
+  apprentice_year2_count: number
+  apprentice_year3_count: number
   equipment: string[]
   problems_notes: string | null
   created_at: string
@@ -52,6 +55,29 @@ export interface WeeklyTotalsReport {
     weeklyOT: number
     weeklyDT: number
     weeklyTotal: number
+  }>
+  // Week status for UI display
+  isWeekComplete: boolean
+  lastDataDate: string // The last date with data (for week-to-date display)
+  daysWithData: number // Number of days with actual data
+}
+
+export interface DailyWorkerTotals {
+  date: string
+  totalST: number
+  totalOT: number
+  totalDT: number
+  totalHours: number
+  workerCount: number
+  workers: Array<{
+    workerId: string
+    workerName: string
+    workerTrade: string
+    dailyST: number
+    dailyOT: number
+    dailyDT: number
+    dailyTotal: number
+    status: string
   }>
 }
 
@@ -84,6 +110,9 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
       workerCount: 0,
       dailyWorkerCounts: {},
       workerTotals: [],
+      isWeekComplete: false,
+      lastDataDate: weekStartStr,
+      daysWithData: 0,
     }
   }
 
@@ -185,6 +214,16 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
     dailyWorkerCountsResult[date] = workers.size
   }
 
+  // Calculate week status
+  const today = new Date()
+  const todayStr = today.toISOString().split("T")[0]
+  const isWeekComplete = todayStr > weekEndStr // Week is complete if today is after the week end (Tuesday)
+  
+  // Find the last date with actual data
+  const datesWithData = Object.keys(dailyWorkerCountsResult).sort()
+  const lastDataDate = datesWithData.length > 0 ? datesWithData[datesWithData.length - 1] : weekStartStr
+  const daysWithData = datesWithData.length
+
   return {
     weekStart: weekStartStr,
     weekEnd: weekEndStr,
@@ -195,6 +234,103 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
     workerCount: workerTotals.length,
     dailyWorkerCounts: dailyWorkerCountsResult,
     workerTotals,
+    isWeekComplete,
+    lastDataDate,
+    daysWithData,
+  }
+}
+
+// Get daily totals for a specific date
+export async function getDailyWorkerTotals(weekStart: string, workDate: string): Promise<DailyWorkerTotals> {
+  const supabase = await createClient()
+
+  // Find the timesheet for this week
+  const { data: timesheet, error: timesheetError } = await supabase
+    .from("timesheets")
+    .select("id")
+    .eq("week_start", weekStart)
+    .single()
+
+  if (timesheetError || !timesheet) {
+    return {
+      date: workDate,
+      totalST: 0,
+      totalOT: 0,
+      totalDT: 0,
+      totalHours: 0,
+      workerCount: 0,
+      workers: [],
+    }
+  }
+
+  // Get entries for this specific day
+  const { data: entries, error: entriesError } = await supabase
+    .from("timesheet_entries")
+    .select(`
+      worker_id,
+      regular_hours,
+      overtime_hours,
+      double_time_hours,
+      attendance_status,
+      worker:workers(id, name, trade)
+    `)
+    .eq("timesheet_id", timesheet.id)
+    .eq("work_date", workDate)
+
+  if (entriesError || !entries) {
+    return {
+      date: workDate,
+      totalST: 0,
+      totalOT: 0,
+      totalDT: 0,
+      totalHours: 0,
+      workerCount: 0,
+      workers: [],
+    }
+  }
+
+  let totalST = 0
+  let totalOT = 0
+  let totalDT = 0
+  const workers: DailyWorkerTotals["workers"] = []
+
+  for (const entry of entries) {
+    const status = entry.attendance_status || "Present"
+    const isAbsent = status === "Absent"
+    
+    const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
+    const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
+    const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
+    const dailyTotal = st + ot + dt
+
+    totalST += st
+    totalOT += ot
+    totalDT += dt
+
+    const worker = entry.worker as { id: string; name: string; trade: string } | null
+    workers.push({
+      workerId: entry.worker_id,
+      workerName: worker?.name || "Unknown",
+      workerTrade: worker?.trade || "Unknown",
+      dailyST: st,
+      dailyOT: ot,
+      dailyDT: dt,
+      dailyTotal,
+      status,
+    })
+  }
+
+  // Filter to only workers who were present and had hours
+  const presentWorkers = workers.filter(w => w.status !== "Absent" && w.dailyTotal > 0)
+
+  return {
+    date: workDate,
+    totalST,
+    totalOT,
+    totalDT,
+    totalHours: totalST + totalOT + totalDT,
+    workerCount: presentWorkers.length,
+    workers,
   }
 }
 
@@ -436,27 +572,31 @@ export async function saveDailyFieldReport(data: {
   workDate: string
   workPerformed?: string
   journeymanCount?: number
-  apprenticeCount?: number
+  apprenticeYear1Count?: number
+  apprenticeYear2Count?: number
+  apprenticeYear3Count?: number
   equipment?: string[]
   problemsNotes?: string
 }): Promise<{ success: boolean; report?: DailyFieldReport; error?: string }> {
   const supabase = await createClient()
 
+  const upsertData = {
+    week_start: data.weekStart,
+    work_date: data.workDate,
+    work_performed: data.workPerformed || null,
+    journeyman_count: data.journeymanCount || 0,
+    apprentice_year1_count: data.apprenticeYear1Count || 0,
+    apprentice_year2_count: data.apprenticeYear2Count || 0,
+    apprentice_year3_count: data.apprenticeYear3Count || 0,
+    apprentice_count: (data.apprenticeYear1Count || 0) + (data.apprenticeYear2Count || 0) + (data.apprenticeYear3Count || 0), // Legacy field
+    equipment: data.equipment || [],
+    problems_notes: data.problemsNotes || null,
+    updated_at: new Date().toISOString(),
+  }
+
   const { data: report, error } = await supabase
     .from("daily_field_reports")
-    .upsert(
-      {
-        week_start: data.weekStart,
-        work_date: data.workDate,
-        work_performed: data.workPerformed || null,
-        journeyman_count: data.journeymanCount || 0,
-        apprentice_count: data.apprenticeCount || 0,
-        equipment: data.equipment || [],
-        problems_notes: data.problemsNotes || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "week_start,work_date" }
-    )
+    .upsert(upsertData, { onConflict: "week_start,work_date" })
     .select()
     .single()
 
@@ -472,5 +612,189 @@ export async function saveDailyFieldReport(data: {
       ...report,
       equipment: report.equipment || [],
     }
+  }
+}
+
+// Types for PDF export
+export interface WeeklyPDFWorkerData {
+  workerId: string
+  workerName: string
+  workerLevel: string // "Journeyman" | "Apprentice Year 1" | etc.
+  levelAbbr: string // "JM" | "APP1" | etc.
+  dailyHours: {
+    [date: string]: {
+      st: number
+      ot: number
+      dt: number
+    }
+  }
+  totalST: number
+  totalOT: number
+  totalDT: number
+  totalHours: number
+}
+
+export interface WeeklyPDFData {
+  weekStart: string
+  weekEnd: string
+  weekDates: string[] // Array of 7 dates in order (Wed, Thu, Fri, Sat, Sun, Mon, Tue)
+  workers: WeeklyPDFWorkerData[]
+  totalST: number
+  totalOT: number
+  totalDT: number
+  totalHours: number
+  notes: string | null
+}
+
+// Get level abbreviation
+function getLevelAbbreviation(level: string): string {
+  switch (level) {
+    case "Journeyman": return "JM"
+    case "Apprentice Year 1": return "APP1"
+    case "Apprentice Year 2": return "APP2"
+    case "Apprentice Year 3": return "APP3"
+    default: return "JM"
+  }
+}
+
+// Get detailed weekly data for PDF export
+export async function getWeeklyPDFData(weekStartDate: Date): Promise<WeeklyPDFData | null> {
+  const supabase = await createClient()
+  
+  const weekStartStr = weekStartDate.toISOString().split("T")[0]
+  const weekEnd = new Date(weekStartDate)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+  const weekEndStr = weekEnd.toISOString().split("T")[0]
+
+  // Generate array of 7 dates
+  const weekDates: string[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStartDate)
+    d.setDate(d.getDate() + i)
+    weekDates.push(d.toISOString().split("T")[0])
+  }
+
+  // Find the timesheet for this week
+  const { data: timesheet, error: timesheetError } = await supabase
+    .from("timesheets")
+    .select("id")
+    .eq("week_start", weekStartStr)
+    .single()
+
+  if (timesheetError || !timesheet) {
+    return {
+      weekStart: weekStartStr,
+      weekEnd: weekEndStr,
+      weekDates,
+      workers: [],
+      totalST: 0,
+      totalOT: 0,
+      totalDT: 0,
+      totalHours: 0,
+      notes: null,
+    }
+  }
+
+  // Get all entries for this timesheet with full worker info (including level)
+  const { data: entries, error: entriesError } = await supabase
+    .from("timesheet_entries")
+    .select(`
+      worker_id,
+      regular_hours,
+      overtime_hours,
+      double_time_hours,
+      work_date,
+      attendance_status,
+      worker:workers(id, name, trade, level)
+    `)
+    .eq("timesheet_id", timesheet.id)
+
+  if (entriesError) {
+    console.error("Error fetching entries for PDF:", entriesError)
+    return null
+  }
+
+  // Build worker data map
+  const workerMap = new Map<string, WeeklyPDFWorkerData>()
+
+  for (const entry of entries || []) {
+    const status = (entry as { attendance_status?: string }).attendance_status
+    const isAbsent = status === "Absent"
+    
+    const st = isAbsent ? 0 : (Number(entry.regular_hours) || 0)
+    const ot = isAbsent ? 0 : (Number(entry.overtime_hours) || 0)
+    const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
+    const workDate = (entry as { work_date?: string }).work_date || ""
+
+    const worker = entry.worker as { id: string; name: string; trade: string; level?: string } | null
+    const workerLevel = worker?.level || "Journeyman"
+
+    let workerData = workerMap.get(entry.worker_id)
+    if (!workerData) {
+      workerData = {
+        workerId: entry.worker_id,
+        workerName: worker?.name || "Unknown",
+        workerLevel,
+        levelAbbr: getLevelAbbreviation(workerLevel),
+        dailyHours: {},
+        totalST: 0,
+        totalOT: 0,
+        totalDT: 0,
+        totalHours: 0,
+      }
+      workerMap.set(entry.worker_id, workerData)
+    }
+
+    // Add daily hours
+    workerData.dailyHours[workDate] = { st, ot, dt }
+    workerData.totalST += st
+    workerData.totalOT += ot
+    workerData.totalDT += dt
+    workerData.totalHours += st + ot + dt
+  }
+
+  // Calculate totals
+  let totalST = 0
+  let totalOT = 0
+  let totalDT = 0
+
+  const workers = Array.from(workerMap.values())
+    .filter(w => w.totalHours > 0)
+    .sort((a, b) => a.workerName.localeCompare(b.workerName))
+
+  for (const w of workers) {
+    totalST += w.totalST
+    totalOT += w.totalOT
+    totalDT += w.totalDT
+  }
+
+  // Get field report notes for the week (combine all daily notes)
+  const { data: fieldReports } = await supabase
+    .from("daily_field_reports")
+    .select("work_date, problems_notes")
+    .eq("week_start", weekStartStr)
+    .not("problems_notes", "is", null)
+    .order("work_date", { ascending: true })
+
+  let notes: string | null = null
+  if (fieldReports && fieldReports.length > 0) {
+    const noteEntries = fieldReports
+      .filter(r => r.problems_notes && r.problems_notes.trim())
+      .map(r => `${new Date(r.work_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}: ${r.problems_notes}`)
+    if (noteEntries.length > 0) {
+      notes = noteEntries.join("\n")
+    }
+  }
+
+  return {
+    weekStart: weekStartStr,
+    weekEnd: weekEndStr,
+    weekDates,
+    workers,
+    totalST,
+    totalOT,
+    totalDT,
+    totalHours: totalST + totalOT + totalDT,
+    notes,
   }
 }

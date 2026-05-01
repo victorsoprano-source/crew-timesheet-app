@@ -3,11 +3,15 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
+export type WorkerLevel = "Journeyman" | "Apprentice Year 1" | "Apprentice Year 2" | "Apprentice Year 3"
+
 export interface Worker {
   id: string
   name: string
   trade: string
   phone: string | null
+  photo_pathname: string | null
+  level: WorkerLevel
   status: "active" | "off-site" | "on-leave"
   certifications: string[]
   created_at: string
@@ -78,25 +82,57 @@ export async function getWorkerStats() {
   return stats
 }
 
+export interface CertificationInput {
+  certificationType: string
+  photoPathname?: string
+  issueDate: string
+  expirationDate: string
+}
+
 export async function createWorker(formData: {
   name: string
   trade: string
   phone: string
+  level: WorkerLevel
+  photo_pathname?: string
   certifications: string[]
-}): Promise<{ success: boolean; error?: string }> {
+  documentedCertifications?: CertificationInput[]
+}): Promise<{ success: boolean; workerId?: string; error?: string }> {
   const supabase = await createClient()
 
-  const { error } = await supabase.from("workers").insert({
+  const { data: worker, error } = await supabase.from("workers").insert({
     name: formData.name,
     trade: formData.trade,
     phone: formData.phone || null,
+    level: formData.level,
+    photo_pathname: formData.photo_pathname || null,
     certifications: formData.certifications,
     status: "active",
-  })
+  }).select("id").single()
 
   if (error) {
     console.error("Error creating worker:", error)
     return { success: false, error: error.message }
+  }
+
+  // Save documented certifications if any
+  if (formData.documentedCertifications && formData.documentedCertifications.length > 0 && worker?.id) {
+    const certRecords = formData.documentedCertifications.map(cert => ({
+      worker_id: worker.id,
+      certification_type: cert.certificationType,
+      photo_pathname: cert.photoPathname || null,
+      issue_date: cert.issueDate,
+      expiration_date: cert.expirationDate,
+    }))
+
+    const { error: certError } = await supabase
+      .from("worker_certifications")
+      .insert(certRecords)
+
+    if (certError) {
+      console.error("Error saving certifications:", certError)
+      // Worker was created but certs failed - still return success with warning
+    }
   }
 
   // Log activity
@@ -106,7 +142,7 @@ export async function createWorker(formData: {
   })
 
   revalidatePath("/")
-  return { success: true }
+  return { success: true, workerId: worker?.id }
 }
 
 export async function updateWorkerStatus(
@@ -135,6 +171,8 @@ export async function updateWorker(
     name: string
     trade: string
     phone: string
+    level: WorkerLevel
+    photo_pathname?: string | null
     certifications: string[]
     status: "active" | "off-site" | "on-leave"
   }
@@ -147,6 +185,8 @@ export async function updateWorker(
       name: formData.name,
       trade: formData.trade,
       phone: formData.phone || null,
+      level: formData.level,
+      photo_pathname: formData.photo_pathname ?? undefined,
       certifications: formData.certifications,
       status: formData.status,
       updated_at: new Date().toISOString(),
@@ -189,6 +229,8 @@ export async function deleteWorker(
 
 // Worker Certifications functions
 export async function getWorkerCertifications(workerId?: string): Promise<WorkerCertification[]> {
+  console.log("[v0] SERVER getWorkerCertifications called, workerId:", workerId)
+  
   const supabase = await createClient()
 
   let query = supabase
@@ -206,9 +248,11 @@ export async function getWorkerCertifications(workerId?: string): Promise<Worker
   const { data, error } = await query
 
   if (error) {
-    console.error("Error fetching certifications:", error)
+    console.log("[v0] SERVER getWorkerCertifications error:", error.message)
     return []
   }
+
+  console.log("[v0] SERVER getWorkerCertifications found:", data?.length, "certifications")
 
   return (data || []).map((cert: { workers?: { name: string } | null }) => ({
     ...cert,
@@ -249,25 +293,32 @@ export async function addWorkerCertification(data: {
   issueDate: string
   expirationDate: string
 }): Promise<{ success: boolean; certification?: WorkerCertification; error?: string }> {
+  console.log("[v0] SERVER addWorkerCertification called with:", JSON.stringify(data))
+  
   const supabase = await createClient()
+
+  const insertData = {
+    worker_id: data.workerId,
+    certification_type: data.certificationType,
+    photo_pathname: data.photoPathname || null,
+    issue_date: data.issueDate,
+    expiration_date: data.expirationDate,
+  }
+  
+  console.log("[v0] SERVER inserting into worker_certifications:", JSON.stringify(insertData))
 
   const { data: cert, error } = await supabase
     .from("worker_certifications")
-    .insert({
-      worker_id: data.workerId,
-      certification_type: data.certificationType,
-      photo_pathname: data.photoPathname || null,
-      issue_date: data.issueDate,
-      expiration_date: data.expirationDate,
-    })
+    .insert(insertData)
     .select()
     .single()
 
   if (error) {
-    console.error("Error adding certification:", error)
+    console.log("[v0] SERVER insert error:", error.message, error.details, error.hint)
     return { success: false, error: error.message }
   }
 
+  console.log("[v0] SERVER insert success, cert id:", cert?.id)
   revalidatePath("/")
   return { success: true, certification: cert }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2 } from "lucide-react"
+import { FileText, Download, Clock, Users, TrendingUp, Loader2, ChevronLeft, ChevronRight, Camera, X, Plus, ImageIcon, Wrench, AlertTriangle, Save, HardHat, Images, Trash2, Calendar, CalendarDays, CheckCircle, XCircle } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,30 +16,52 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { getWeeklyTotalsFromTimesheets, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
+
+import { getWeeklyTotalsFromTimesheets, getDailyWorkerTotals, getReportPhotos, addReportPhoto, updatePhotoCaption, deleteReportPhoto, getDailyFieldReport, saveDailyFieldReport, type WeeklyTotalsReport, type DailyWorkerTotals, type ReportPhoto, type DailyFieldReport } from "@/app/actions/reports"
+import { getEquipmentByType } from "@/lib/equipment-list"
+
+// Calculate current day index within Wed-Tue week (0=Wed, 1=Thu, ..., 6=Tue)
+const getCurrentDayIndex = () => {
+  const today = new Date()
+  const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+  // Map to Wed-Tue week: Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+  const dayMap: Record<number, number> = { 3: 0, 4: 1, 5: 2, 6: 3, 0: 4, 1: 5, 2: 6 }
+  return dayMap[dayOfWeek] ?? 0
+}
 
 export function DailyReports() {
+  const [viewMode, setViewMode] = useState<"daily" | "weekly">("daily")
   const [weeklyReport, setWeeklyReport] = useState<WeeklyTotalsReport | null>(null)
+  const [dailyTotals, setDailyTotals] = useState<DailyWorkerTotals | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [weekOffset, setWeekOffset] = useState(0)
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0) // 0 = Wednesday, 6 = Tuesday
+  const [selectedDayIndex, setSelectedDayIndex] = useState(getCurrentDayIndex) // Default to current day
   const [photos, setPhotos] = useState<ReportPhoto[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<{ id: string; name: string; status: "pending" | "uploading" | "success" | "error"; error?: string }[]>([])
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [photoNotes, setPhotoNotes] = useState<Record<string, string>>({})
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
   
   // Field Report state
   const [fieldReport, setFieldReport] = useState<DailyFieldReport | null>(null)
   const [workPerformed, setWorkPerformed] = useState("")
   const [journeymanCount, setJourneymanCount] = useState(0)
-  const [apprenticeCount, setApprenticeCount] = useState(0)
+  const [apprenticeYear1Count, setApprenticeYear1Count] = useState(0)
+  const [apprenticeYear2Count, setApprenticeYear2Count] = useState(0)
+  const [apprenticeYear3Count, setApprenticeYear3Count] = useState(0)
   const [equipment, setEquipment] = useState<string[]>([])
-  const [newEquipment, setNewEquipment] = useState("")
   const [problemsNotes, setProblemsNotes] = useState("")
   const [isSavingReport, setIsSavingReport] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [exportingType, setExportingType] = useState<"master" | "summary" | "daily" | null>(null)
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
+  const [pdfType, setPdfType] = useState<"master" | "summary" | "daily" | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
 
   const getWeekDays = (weekStart: Date) => {
     const days = []
@@ -58,9 +80,7 @@ export function DailyReports() {
 
   const weekDays = weeklyReport ? getWeekDays(new Date(weeklyReport.weekStart + "T00:00:00")) : []
   const selectedDay = weekDays[selectedDayIndex]
-  const workersToday = selectedDay && weeklyReport?.dailyWorkerCounts 
-    ? weeklyReport.dailyWorkerCounts[selectedDay.date] || 0 
-    : 0
+  const workersToday = dailyTotals?.workerCount || 0
 
   const getWeekStart = (offset: number) => {
     const today = new Date()
@@ -91,27 +111,89 @@ export function DailyReports() {
           notesMap[p.id] = p.caption || ""
         })
         setPhotoNotes(notesMap)
+        
+        // Load daily totals for the current selected day
+        const weekDaysNow = getWeekDays(new Date(report.weekStart + "T00:00:00"))
+        const selectedDayNow = weekDaysNow[selectedDayIndex]
+        if (selectedDayNow) {
+          const daily = await getDailyWorkerTotals(report.weekStart, selectedDayNow.date)
+          setDailyTotals(daily)
+        }
       }
     } catch (err) {
       console.error("Error loading report data:", err)
       setWeeklyReport(null)
+      setDailyTotals(null)
     }
     
     setIsLoading(false)
   }
 
-  const getPhotoUrl = (pathname: string) => {
+  // Load daily totals when selected day changes
+  const loadDailyTotals = async () => {
+    if (!weeklyReport || !selectedDay) {
+      console.log("[v0] loadDailyTotals: skipping - weeklyReport or selectedDay missing")
+      setDailyTotals(null)
+      return
+    }
+    
+    console.log("[v0] loadDailyTotals: fetching for", selectedDay.date)
+    
+    try {
+      const daily = await getDailyWorkerTotals(weeklyReport.weekStart, selectedDay.date)
+      console.log("[v0] loadDailyTotals: result", {
+        date: daily.date,
+        totalST: daily.totalST,
+        totalOT: daily.totalOT,
+        totalDT: daily.totalDT,
+        totalHours: daily.totalHours,
+        workerCount: daily.workers.length
+      })
+      setDailyTotals(daily)
+    } catch (err) {
+      console.error("[v0] Error loading daily totals:", err)
+      setDailyTotals(null)
+    }
+  }
+
+  const getPhotoUrl = (pathname: string | null | undefined): string | null => {
+    if (!pathname) return null
+    if (pathname.startsWith("http")) return pathname
+    // Route through API which handles both Vercel Blob and Supabase Storage
     return `/api/file?pathname=${encodeURIComponent(pathname)}`
   }
 
-  const handlePhotoUpload = async (file: File) => {
-    if (!weeklyReport || !selectedDay) return
-    
-    setIsUploading(true)
+  // Upload a single file and return result
+  const uploadSingleFile = async (file: File, queueId: string, index: number): Promise<{ success: boolean; photo?: ReportPhoto; error?: string }> => {
+    if (!weeklyReport || !selectedDay) {
+      return { success: false, error: "No week or day selected" }
+    }
     
     try {
+      // Ensure we have a valid File object
+      if (!(file instanceof File)) {
+        return { success: false, error: "Invalid file format" }
+      }
+      
+      // Check file size
+      if (file.size === 0) {
+        return { success: false, error: "File is empty" }
+      }
+      
+      // Import and use image conversion utility
+      const { prepareImageForUpload } = await import("@/lib/image-utils")
+      
+      // Convert image to JPEG (strips EXIF, normalizes format)
+      const { file: processedFile, error: conversionError } = await prepareImageForUpload(file, index)
+      
+      if (conversionError || !processedFile) {
+        return { success: false, error: conversionError || "Failed to process image" }
+      }
+      
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', processedFile)
+      formData.append('workDate', selectedDay.date)
+      formData.append('index', String(index))
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -121,30 +203,99 @@ export function DailyReports() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Upload failed')
+        return { success: false, error: result.error || 'Upload failed' }
       }
 
       // Save to database
-      const { success, photo } = await addReportPhoto({
+      const { success, photo, error } = await addReportPhoto({
         weekStart: weeklyReport.weekStart,
         workDate: selectedDay.date,
         photoPathname: result.pathname,
       })
 
       if (success && photo) {
-        setPhotos([photo, ...photos])
-        // Initialize empty note for new photo
-        setPhotoNotes(prev => ({ ...prev, [photo.id]: "" }))
+        return { success: true, photo }
+      } else {
+        return { success: false, error: error || "Failed to save photo" }
       }
     } catch (err) {
-      console.error("Upload error:", err)
-    } finally {
-      setIsUploading(false)
+      return { success: false, error: err instanceof Error ? err.message : "Upload failed" }
     }
+  }
+
+  // Handle multiple file uploads with progress tracking
+  const handleMultiplePhotoUpload = async (files: File[]) => {
+    if (!weeklyReport || !selectedDay || files.length === 0) return
+    
+    setIsUploading(true)
+    setUploadSuccess(null)
+    
+    // Create queue entries for all files
+    const queueEntries = files.map((file, index) => ({
+      id: `upload-${Date.now()}-${index}`,
+      name: file.name,
+      status: "pending" as const,
+    }))
+    
+    setUploadQueue(queueEntries)
+    
+    let successCount = 0
+    let errorCount = 0
+    const newPhotos: ReportPhoto[] = []
+    
+    // Process uploads one at a time to avoid overwhelming the server
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const queueId = queueEntries[i].id
+      
+      // Update status to uploading
+      setUploadQueue(prev => prev.map(item => 
+        item.id === queueId ? { ...item, status: "uploading" as const } : item
+      ))
+      
+      const result = await uploadSingleFile(file, queueId, i)
+      
+      if (result.success && result.photo) {
+        successCount++
+        newPhotos.push(result.photo)
+        setUploadQueue(prev => prev.map(item => 
+          item.id === queueId ? { ...item, status: "success" as const } : item
+        ))
+      } else {
+        errorCount++
+        setUploadQueue(prev => prev.map(item => 
+          item.id === queueId ? { ...item, status: "error" as const, error: result.error } : item
+        ))
+      }
+    }
+    
+    // Add all successful photos to state at once
+    if (newPhotos.length > 0) {
+      setPhotos(prev => [...newPhotos, ...prev])
+      // Initialize empty notes for new photos
+      const newNotes: Record<string, string> = {}
+      newPhotos.forEach(p => { newNotes[p.id] = "" })
+      setPhotoNotes(prev => ({ ...prev, ...newNotes }))
+    }
+    
+    // Show success message
+    if (successCount > 0) {
+      setUploadSuccess(`${successCount} photo${successCount > 1 ? 's' : ''} uploaded successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`)
+      // Clear success message after 3 seconds
+      setTimeout(() => setUploadSuccess(null), 3000)
+    }
+    
+    // Clear queue after a short delay to show final status
+    setTimeout(() => {
+      setUploadQueue([])
+      setIsUploading(false)
+    }, errorCount > 0 ? 5000 : 1500) // Keep longer if there were errors
   }
 
   // Mobile-friendly file select - allows camera or gallery
   const handleFileSelect = (useCamera: boolean = false) => {
+    if (isUploading) return // Prevent double-tap while uploading
+    
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
@@ -158,10 +309,7 @@ export function DailyReports() {
     input.onchange = async (e) => {
       const files = (e.target as HTMLInputElement).files
       if (files && files.length > 0) {
-        // Upload all selected files
-        for (const file of Array.from(files)) {
-          await handlePhotoUpload(file)
-        }
+        await handleMultiplePhotoUpload(Array.from(files))
       }
     }
     input.click()
@@ -208,14 +356,18 @@ export function DailyReports() {
     if (report) {
       setWorkPerformed(report.work_performed || "")
       setJourneymanCount(report.journeyman_count || 0)
-      setApprenticeCount(report.apprentice_count || 0)
+      setApprenticeYear1Count(report.apprentice_year1_count || 0)
+      setApprenticeYear2Count(report.apprentice_year2_count || 0)
+      setApprenticeYear3Count(report.apprentice_year3_count || 0)
       setEquipment(report.equipment || [])
       setProblemsNotes(report.problems_notes || "")
     } else {
       // Reset form for new day
       setWorkPerformed("")
       setJourneymanCount(0)
-      setApprenticeCount(0)
+      setApprenticeYear1Count(0)
+      setApprenticeYear2Count(0)
+      setApprenticeYear3Count(0)
       setEquipment([])
       setProblemsNotes("")
     }
@@ -225,43 +377,46 @@ export function DailyReports() {
     if (!weeklyReport || !selectedDay) return
     
     setIsSavingReport(true)
+    setSaveStatus("saving")
+    
+    const payload = {
+      weekStart: weeklyReport.weekStart,
+      workDate: selectedDay.date,
+      workPerformed,
+      journeymanCount,
+      apprenticeYear1Count,
+      apprenticeYear2Count,
+      apprenticeYear3Count,
+      equipment,
+      problemsNotes,
+    }
     
     try {
-      await saveDailyFieldReport({
-        weekStart: weeklyReport.weekStart,
-        workDate: selectedDay.date,
-        workPerformed,
-        journeymanCount,
-        apprenticeCount,
-        equipment,
-        problemsNotes,
-      })
+      await saveDailyFieldReport(payload)
+      setSaveStatus("saved")
+      // Reset to idle after 2 seconds
+      setTimeout(() => setSaveStatus("idle"), 2000)
     } catch (err) {
       console.error("Error saving field report:", err)
+      setSaveStatus("error")
+      // Reset to idle after 3 seconds
+      setTimeout(() => setSaveStatus("idle"), 3000)
     } finally {
       setIsSavingReport(false)
     }
   }
 
-  const addEquipmentItem = () => {
-    if (newEquipment.trim()) {
-      setEquipment([...equipment, newEquipment.trim()])
-      setNewEquipment("")
-    }
-  }
-
-  const removeEquipmentItem = (index: number) => {
-    setEquipment(equipment.filter((_, i) => i !== index))
-  }
+  
 
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
 
-  // Load field report when selected day changes
+  // Load field report and daily totals when selected day changes
   useEffect(() => {
     loadFieldReport()
+    loadDailyTotals()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDayIndex, weeklyReport?.weekStart])
 
@@ -282,16 +437,29 @@ export function DailyReports() {
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
-      {/* Header */}
-      <Card className="flex items-center gap-3 p-4 bg-card border-border">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
-          <FileText className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Weekly Reports</h2>
-          <p className="text-sm text-muted-foreground">View timesheet totals</p>
-        </div>
-      </Card>
+      {/* View Mode Toggle */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant={viewMode === "daily" ? "default" : "outline"}
+          onClick={() => setViewMode("daily")}
+          className={viewMode === "daily" ? "bg-primary text-primary-foreground h-14" : "border-border h-14"}
+        >
+          <div className="flex flex-col items-center gap-0.5">
+            <Calendar className="h-5 w-5" />
+            <span className="text-xs font-semibold">Daily Reports</span>
+          </div>
+        </Button>
+        <Button
+          variant={viewMode === "weekly" ? "default" : "outline"}
+          onClick={() => setViewMode("weekly")}
+          className={viewMode === "weekly" ? "bg-primary text-primary-foreground h-14" : "border-border h-14"}
+        >
+          <div className="flex flex-col items-center gap-0.5">
+            <CalendarDays className="h-5 w-5" />
+            <span className="text-xs font-semibold">Weekly Reports</span>
+          </div>
+        </Button>
+      </div>
 
       {/* Week Navigation */}
       <Card className="flex items-center justify-between p-3 bg-card border-border">
@@ -307,16 +475,415 @@ export function DailyReports() {
         </Button>
       </Card>
 
-      {/* Summary Stats - ST, OT, DT breakdown */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* ==================== WEEKLY REPORTS ==================== */}
+      {viewMode === "weekly" && (
+        <>
+          {/* Weekly Reports Header */}
+          <Card className="flex items-center gap-3 p-4 bg-card border-border">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-chart-3/20">
+              <CalendarDays className="h-6 w-6 text-chart-3" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-foreground">Weekly Reports</h2>
+              <p className="text-sm text-muted-foreground">
+                {weeklyReport?.isWeekComplete ? "Final totals for the week" : "Week-to-date accumulated totals"}
+              </p>
+            </div>
+          </Card>
+
+          {/* Export PDF Buttons */}
+          <Card className="p-4 bg-card border-border">
+            <p className="text-sm font-semibold text-foreground mb-3">Export Weekly Reports</p>
+            <div className="flex flex-col gap-2">
+              {/* Master Timesheet Button */}
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (exportingType || !weeklyReport) return
+                  setExportingType("master")
+                  setPdfBlobUrl(null)
+                  setPdfType(null)
+                  
+                  const weekStartStr = weeklyReport.weekStart
+                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                  const controller = new AbortController()
+                  const timeoutId = setTimeout(() => controller.abort(), 30000)
+                  
+                  try {
+                    const response = await fetch(`/api/export-pdf/master?weekStart=${weekStartStr}`, {
+                      signal: controller.signal
+                    })
+                    clearTimeout(timeoutId)
+                    
+                    if (!response.ok) {
+                      let errorMsg = "PDF generation failed"
+                      try {
+                        const errorData = await response.json()
+                        errorMsg = errorData.error || errorMsg
+                      } catch {}
+                      alert(errorMsg)
+                      return
+                    }
+                    
+                    const blob = await response.blob()
+                    if (blob.size === 0) {
+                      alert("Error: Empty PDF received")
+                      return
+                    }
+                    
+                    const url = window.URL.createObjectURL(blob)
+                    setPdfBlobUrl(url)
+                    setPdfType("master")
+                    
+                    if (isMobile) {
+                      window.open(url, "_blank")
+                    } else {
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `Weekly_Timesheet_Master_${weekStartStr}.pdf`
+                      a.style.display = "none"
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                    }
+                  } catch (err) {
+                    clearTimeout(timeoutId)
+                    if (err instanceof Error && err.name === "AbortError") {
+                      alert("Export timed out. Please try again.")
+                    } else {
+                      alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+                    }
+                  } finally {
+                    setExportingType(null)
+                  }
+                }}
+                disabled={!!exportingType || !weeklyReport || weeklyReport.workerCount === 0}
+                className="w-full justify-start border-border h-12"
+              >
+                {exportingType === "master" ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                <div className="text-left">
+                  <div className="font-medium">Weekly Timesheet Master</div>
+                  <div className="text-xs text-muted-foreground">Official crew sheet with daily breakdown</div>
+                </div>
+              </Button>
+              
+              {/* Summary Report Button */}
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (exportingType || !weeklyReport) return
+                  setExportingType("summary")
+                  setPdfBlobUrl(null)
+                  setPdfType(null)
+                  
+                  const weekStartStr = weeklyReport.weekStart
+                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                  const controller = new AbortController()
+                  const timeoutId = setTimeout(() => controller.abort(), 30000)
+                  
+                  try {
+                    const response = await fetch(`/api/export-pdf/summary?weekStart=${weekStartStr}`, {
+                      signal: controller.signal
+                    })
+                    clearTimeout(timeoutId)
+                    
+                    if (!response.ok) {
+                      let errorMsg = "PDF generation failed"
+                      try {
+                        const errorData = await response.json()
+                        errorMsg = errorData.error || errorMsg
+                      } catch {}
+                      alert(errorMsg)
+                      return
+                    }
+                    
+                    const blob = await response.blob()
+                    if (blob.size === 0) {
+                      alert("Error: Empty PDF received")
+                      return
+                    }
+                    
+                    const url = window.URL.createObjectURL(blob)
+                    setPdfBlobUrl(url)
+                    setPdfType("summary")
+                    
+                    if (isMobile) {
+                      window.open(url, "_blank")
+                    } else {
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `Weekly_Summary_${weekStartStr}.pdf`
+                      a.style.display = "none"
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                    }
+                  } catch (err) {
+                    clearTimeout(timeoutId)
+                    if (err instanceof Error && err.name === "AbortError") {
+                      alert("Export timed out. Please try again.")
+                    } else {
+                      alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+                    }
+                  } finally {
+                    setExportingType(null)
+                  }
+                }}
+                disabled={!!exportingType || !weeklyReport || weeklyReport.workerCount === 0}
+                className="w-full justify-start border-border h-12"
+              >
+                {exportingType === "summary" ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                <div className="text-left">
+                  <div className="font-medium">Weekly Summary Report</div>
+                  <div className="text-xs text-muted-foreground">Quick overview for email/sharing</div>
+                </div>
+              </Button>
+            </div>
+          </Card>
+
+          {/* PDF Actions - shown when blob URL exists (for weekly exports only) */}
+          {pdfBlobUrl && (pdfType === "master" || pdfType === "summary") && (
+            <Card className="p-4 bg-chart-3/10 border-chart-3/30">
+              <p className="text-sm text-chart-3 font-semibold mb-3">
+                {pdfType === "master" ? "Timesheet Master" : "Summary Report"} Ready!
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => window.open(pdfBlobUrl, "_blank")}
+                  className="w-full bg-chart-3 hover:bg-chart-3/90 text-primary-foreground"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Open PDF
+                </Button>
+                
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const a = document.createElement("a")
+                      a.href = pdfBlobUrl
+                      a.download = pdfType === "master" 
+                        ? `Weekly_Timesheet_Master_${weeklyReport?.weekStart || "export"}.pdf`
+                        : `Weekly_Summary_${weeklyReport?.weekStart || "export"}.pdf`
+                      a.click()
+                    }}
+                    className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                  
+                  {typeof navigator !== "undefined" && navigator.share && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(pdfBlobUrl)
+                          const blob = await response.blob()
+                          const filename = pdfType === "master" 
+                            ? `Weekly_Timesheet_Master_${weeklyReport?.weekStart || "export"}.pdf`
+                            : `Weekly_Summary_${weeklyReport?.weekStart || "export"}.pdf`
+                          const file = new File([blob], filename, { type: "application/pdf" })
+                          await navigator.share({
+                            files: [file],
+                            title: pdfType === "master" ? "Weekly Timesheet Master" : "Weekly Summary Report",
+                          })
+                        } catch {}
+                      }}
+                      className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+                    >
+                      Share
+                    </Button>
+                  )}
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      window.URL.revokeObjectURL(pdfBlobUrl)
+                      setPdfBlobUrl(null)
+                      setPdfType(null)
+                    }}
+                    className="text-muted-foreground px-2"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Week Status Badge */}
+          <div className={`border rounded-lg p-3 text-center ${
+            weeklyReport?.isWeekComplete 
+              ? "bg-chart-3/10 border-chart-3/30" 
+              : "bg-amber-500/10 border-amber-500/30"
+          }`}>
+            <p className={`text-sm font-semibold ${
+              weeklyReport?.isWeekComplete ? "text-chart-3" : "text-amber-500"
+            }`}>
+              {weeklyReport?.isWeekComplete ? "Week Complete - Final Totals" : "Week In Progress - To Date"}
+            </p>
+            {!weeklyReport?.isWeekComplete && weeklyReport?.daysWithData !== undefined && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {weeklyReport.daysWithData} day{weeklyReport.daysWithData !== 1 ? "s" : ""} of data so far
+              </p>
+            )}
+          </div>
+
+          {/* Weekly Summary Stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                  <Clock className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalST || 0}</p>
+                  <p className="text-xs text-muted-foreground">Weekly ST</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-3/20">
+                  <Clock className="h-5 w-5 text-chart-3" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalOT || 0}</p>
+                  <p className="text-xs text-muted-foreground">Weekly OT</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/20">
+                  <Clock className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalDT || 0}</p>
+                  <p className="text-xs text-muted-foreground">Weekly DT</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/20">
+                  <TrendingUp className="h-5 w-5 text-accent" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalHours || 0}</p>
+                  <p className="text-xs text-muted-foreground">Total Hours</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Weekly Worker Count */}
+          <Card className="p-4 bg-card border-border">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{weeklyReport?.workerCount || 0}</p>
+                <p className="text-xs text-muted-foreground">
+                  Workers This Week
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Weekly Worker Breakdown (Accumulated) */}
+          {weeklyReport && weeklyReport.workerTotals.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 px-1">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Weekly Worker Hours
+                </h3>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  weeklyReport.isWeekComplete 
+                    ? "bg-chart-3/10 text-chart-3" 
+                    : "bg-amber-500/10 text-amber-500"
+                }`}>
+                  {weeklyReport.isWeekComplete ? "Final Totals" : "Accumulated"}
+                </span>
+              </div>
+              {weeklyReport.workerTotals
+                .filter(worker => worker.weeklyTotal > 0)
+                .map((worker) => (
+                <Card key={worker.workerId} className="p-4 bg-card border-border">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p className="font-medium text-foreground">{worker.workerName}</p>
+                      <p className="text-sm text-muted-foreground">{worker.workerTrade}</p>
+                    </div>
+                    <span className="text-lg font-bold text-foreground">{worker.weeklyTotal} hrs</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-primary/10 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-primary">{worker.weeklyST}</p>
+                      <p className="text-xs text-muted-foreground">ST</p>
+                    </div>
+                    <div className="bg-chart-3/10 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-chart-3">{worker.weeklyOT}</p>
+                      <p className="text-xs text-muted-foreground">OT</p>
+                    </div>
+                    <div className="bg-destructive/10 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-destructive">{worker.weeklyDT}</p>
+                      <p className="text-xs text-muted-foreground">DT</p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Weekly Empty State */}
+          {(!weeklyReport || weeklyReport.workerTotals.filter(w => w.weeklyTotal > 0).length === 0) && !isLoading && (
+            <Card className="p-8 bg-card border-border text-center">
+              <p className="text-muted-foreground">No timesheet data for this week. Add entries in the Timesheet tab.</p>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ==================== DAILY REPORTS ==================== */}
+      {viewMode === "daily" && (
+        <>
+          {/* Daily Reports Header */}
+          <Card className="flex items-center gap-3 p-4 bg-card border-border">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
+              <Calendar className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-foreground">Daily Reports</h2>
+              <p className="text-sm text-muted-foreground">
+                Showing {selectedDay?.dayName} {selectedDay?.dayNum} only
+              </p>
+            </div>
+          </Card>
+
+          {/* Summary Stats - Daily ST, OT, DT breakdown */}
+          <div className="grid grid-cols-2 gap-3">
         <Card className="p-4 bg-card border-border">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
               <Clock className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalST || 0}</p>
-              <p className="text-xs text-muted-foreground">Weekly ST</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalST || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily ST</p>
             </div>
           </div>
         </Card>
@@ -326,8 +893,8 @@ export function DailyReports() {
               <Clock className="h-5 w-5 text-chart-3" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalOT || 0}</p>
-              <p className="text-xs text-muted-foreground">Weekly OT</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalOT || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily OT</p>
             </div>
           </div>
         </Card>
@@ -337,8 +904,8 @@ export function DailyReports() {
               <Clock className="h-5 w-5 text-destructive" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalDT || 0}</p>
-              <p className="text-xs text-muted-foreground">Weekly DT</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalDT || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily DT</p>
             </div>
           </div>
         </Card>
@@ -348,8 +915,8 @@ export function DailyReports() {
               <TrendingUp className="h-5 w-5 text-accent" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{weeklyReport?.totalHours || 0}</p>
-              <p className="text-xs text-muted-foreground">Total Hours</p>
+              <p className="text-2xl font-bold text-foreground">{dailyTotals?.totalHours || 0}</p>
+              <p className="text-xs text-muted-foreground">Daily Hours</p>
             </div>
           </div>
         </Card>
@@ -374,6 +941,245 @@ export function DailyReports() {
                 <span className="text-sm font-bold">{day.dayNum}</span>
               </Button>
             ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Export Daily PDF Button */}
+      <Button
+        variant="outline"
+        onClick={async () => {
+          if (exportingType || !weeklyReport || !selectedDay) {
+            console.log("[v0] Export blocked - missing data:", { 
+              exportingType, 
+              hasWeeklyReport: !!weeklyReport, 
+              hasSelectedDay: !!selectedDay 
+            })
+            return
+          }
+          setExportingType("daily")
+          setPdfBlobUrl(null)
+          setPdfType(null)
+          
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout
+          
+          // Build URL - use relative path which works in both preview and production
+          const apiUrl = `/api/export-pdf/daily?workDate=${encodeURIComponent(selectedDay.date)}&weekStart=${encodeURIComponent(weeklyReport.weekStart)}`
+          console.log("[v0] Fetching PDF from:", apiUrl)
+          
+          try {
+            const response = await fetch(apiUrl, { 
+              signal: controller.signal,
+              credentials: "same-origin", // Include cookies for auth
+              cache: "no-store" // Don't cache PDF requests
+            })
+            clearTimeout(timeoutId)
+            
+            console.log("[v0] PDF response status:", response.status, response.statusText)
+            
+            if (!response.ok) {
+              let errorMsg = `PDF generation failed (${response.status})`
+              try {
+                const contentType = response.headers.get("content-type")
+                if (contentType?.includes("application/json")) {
+                  const errorData = await response.json()
+                  errorMsg = errorData.error || errorMsg
+                }
+              } catch (e) {
+                console.error("[v0] Error parsing error response:", e)
+              }
+              alert(errorMsg)
+              return
+            }
+            
+            const blob = await response.blob()
+            console.log("[v0] PDF blob received, size:", blob.size, "type:", blob.type)
+            
+            if (blob.size === 0) {
+              alert("Error: Empty PDF received. Please try again.")
+              return
+            }
+            
+            const url = window.URL.createObjectURL(blob)
+            setPdfBlobUrl(url)
+            setPdfType("daily")
+            
+            if (isMobile) {
+              // On mobile, open in new tab for better compatibility
+              window.open(url, "_blank")
+            } else {
+              // On desktop, trigger download
+              const a = document.createElement("a")
+              a.href = url
+              a.download = `Daily_Field_Report_${selectedDay.date}.pdf`
+              a.style.display = "none"
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+            }
+          } catch (err) {
+            clearTimeout(timeoutId)
+            console.error("[v0] PDF export error:", err)
+            if (err instanceof Error && err.name === "AbortError") {
+              alert("Export timed out after 60 seconds. Please try again.")
+            } else {
+              alert("Error generating PDF: " + (err instanceof Error ? err.message : "Unknown error"))
+            }
+          } finally {
+            setExportingType(null)
+          }
+        }}
+        disabled={!!exportingType || !weeklyReport || !selectedDay}
+        className="w-full justify-center border-border h-12"
+      >
+        {exportingType === "daily" ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <FileText className="h-4 w-4 mr-2" />
+        )}
+        <span className="font-medium">Export Daily PDF</span>
+      </Button>
+
+      {/* Daily PDF Actions - shown when daily blob URL exists */}
+      {pdfBlobUrl && pdfType === "daily" && (
+        <Card className="p-4 bg-chart-3/10 border-chart-3/30">
+          <p className="text-sm text-chart-3 font-semibold mb-3">Daily Field Report Ready!</p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => window.open(pdfBlobUrl, "_blank")}
+              className="w-full bg-chart-3 hover:bg-chart-3/90 text-primary-foreground"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Open PDF
+            </Button>
+            
+            <div className="flex gap-2">
+              {/* Download Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDownloading}
+                onClick={async () => {
+                  if (!pdfBlobUrl) return
+                  setIsDownloading(true)
+                  
+                  const filename = `Daily-Field-Report-C34921R-${selectedDay?.date || "export"}.pdf`
+                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                  
+                  try {
+                    // Try anchor download first
+                    const a = document.createElement("a")
+                    a.href = pdfBlobUrl
+                    a.download = filename
+                    a.style.display = "none"
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    
+                    // On mobile, also open in new tab as fallback
+                    if (isMobile) {
+                      // Small delay then open in new tab as backup
+                      setTimeout(() => {
+                        window.open(pdfBlobUrl, "_blank")
+                      }, 500)
+                    }
+                  } catch (err) {
+                    // Fallback: open in new tab
+                    window.open(pdfBlobUrl, "_blank")
+                  } finally {
+                    setIsDownloading(false)
+                  }
+                }}
+                className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </>
+                )}
+              </Button>
+              
+              {/* Share Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isSharing}
+                onClick={async () => {
+                  if (!pdfBlobUrl) return
+                  setIsSharing(true)
+                  
+                  const filename = `Daily-Field-Report-C34921R-${selectedDay?.date || "export"}.pdf`
+                  
+                  try {
+                    // Check if navigator.share is available
+                    if (!navigator.share) {
+                      alert("Sharing is not supported on this device. Use Download or Open PDF.")
+                      return
+                    }
+                    
+                    // Fetch the blob from the URL
+                    const response = await fetch(pdfBlobUrl)
+                    const blob = await response.blob()
+                    
+                    // Check if file sharing is supported
+                    const file = new File([blob], filename, { type: "application/pdf" })
+                    const canShareFiles = navigator.canShare && navigator.canShare({ files: [file] })
+                    
+                    if (canShareFiles) {
+                      // Share the file directly
+                      await navigator.share({
+                        files: [file],
+                        title: "Daily Field Report",
+                      })
+                    } else {
+                      // File sharing not supported, try sharing just text/url
+                      // Since blob URLs don't work externally, inform user
+                      alert("File sharing is not supported on this device. Use Download or Open PDF to save the file first.")
+                    }
+                  } catch (err) {
+                    // User cancelled share or error occurred
+                    if (err instanceof Error && err.name !== "AbortError") {
+                      alert("Sharing failed. Use Download or Open PDF instead.")
+                    }
+                  } finally {
+                    setIsSharing(false)
+                  }
+                }}
+                className="flex-1 border-chart-3/50 text-chart-3 hover:bg-chart-3/20"
+              >
+                {isSharing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Sharing...
+                  </>
+                ) : (
+                  <>
+                    Share
+                  </>
+                )}
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  window.URL.revokeObjectURL(pdfBlobUrl)
+                  setPdfBlobUrl(null)
+                  setPdfType(null)
+                }}
+                className="text-muted-foreground px-2"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </Card>
       )}
@@ -411,41 +1217,74 @@ export function DailyReports() {
               className="border-border"
               title="Take photo with camera"
             >
-              {isUploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Camera className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Camera</span>
-                </>
-              )}
+              <Camera className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Camera</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleFileSelect(false)}
               disabled={isUploading}
-              className="border-border"
-              title="Choose from gallery"
+              className="border-border relative"
+              title="Choose multiple photos from gallery"
             >
-              {isUploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Images className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Gallery</span>
-                </>
-              )}
+              <Images className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Gallery</span>
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] px-1 rounded-full">
+                +
+              </span>
             </Button>
           </div>
         </div>
 
-        {dayPhotos.length === 0 ? (
+        {/* Upload Progress Queue */}
+        {uploadQueue.length > 0 && (
+          <div className="mb-4 p-3 bg-secondary/30 rounded-lg border border-border">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Uploading {uploadQueue.filter(u => u.status === "success").length}/{uploadQueue.length} photos...
+            </p>
+            <div className="flex flex-col gap-2">
+              {uploadQueue.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 text-sm">
+                  {item.status === "pending" && (
+                    <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />
+                  )}
+                  {item.status === "uploading" && (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  )}
+                  {item.status === "success" && (
+                    <CheckCircle className="h-4 w-4 text-chart-3" />
+                  )}
+                  {item.status === "error" && (
+                    <XCircle className="h-4 w-4 text-destructive" />
+                  )}
+                  <span className={`truncate flex-1 ${item.status === "error" ? "text-destructive" : "text-foreground"}`}>
+                    {item.name.length > 25 ? `${item.name.slice(0, 25)}...` : item.name}
+                  </span>
+                  {item.status === "error" && item.error && (
+                    <span className="text-xs text-destructive">{item.error}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {uploadSuccess && (
+          <div className="mb-4 p-3 bg-chart-3/10 border border-chart-3/30 rounded-lg flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-chart-3 flex-shrink-0" />
+            <p className="text-sm font-medium text-chart-3">{uploadSuccess}</p>
+          </div>
+        )}
+
+        {dayPhotos.length === 0 && !isUploading ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
               <ImageIcon className="h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm text-muted-foreground">No photos for this day</p>
+            <p className="text-xs text-muted-foreground mt-1">Select multiple photos from gallery at once</p>
             <div className="flex gap-2 mt-3">
               <Button
                 variant="outline"
@@ -457,17 +1296,17 @@ export function DailyReports() {
                 Take Photo
               </Button>
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
                 onClick={() => handleFileSelect(false)}
                 disabled={isUploading}
               >
                 <Images className="h-4 w-4 mr-2" />
-                Gallery
+                Add Photos
               </Button>
             </div>
           </div>
-        ) : (
+        ) : dayPhotos.length > 0 ? (
           <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
             {dayPhotos.map((photo, index) => (
               <div key={photo.id} className="bg-secondary/30 rounded-lg p-3 border border-border">
@@ -492,13 +1331,28 @@ export function DailyReports() {
                   {/* Photo Preview */}
                   <button
                     type="button"
-                    onClick={() => setPreviewImage(getPhotoUrl(photo.photo_pathname))}
-                    className="shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-border hover:opacity-90 transition-opacity"
+                    onClick={() => {
+                      const url = getPhotoUrl(photo.photo_pathname)
+                      if (url) setPreviewImage(url)
+                    }}
+                    className="shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-border hover:opacity-90 transition-opacity bg-muted/30"
                   >
                     <img
-                      src={getPhotoUrl(photo.photo_pathname)}
+                      src={getPhotoUrl(photo.photo_pathname) || ""}
                       alt={`Field entry ${index + 1}`}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.log("[v0] Photo load error:", photo.photo_pathname)
+                        const target = e.currentTarget
+                        target.style.display = "none"
+                        const parent = target.parentElement
+                        if (parent && !parent.querySelector(".photo-fallback")) {
+                          const fallback = document.createElement("div")
+                          fallback.className = "photo-fallback w-full h-full flex flex-col items-center justify-center text-muted-foreground"
+                          fallback.innerHTML = '<svg class="h-6 w-6 mb-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="text-[10px]">Unavailable</span>'
+                          parent.appendChild(fallback)
+                        }
+                      }}
                     />
                   </button>
                   
@@ -533,7 +1387,7 @@ export function DailyReports() {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </Card>
 
       {/* Daily Field Report */}
@@ -589,17 +1443,43 @@ export function DailyReports() {
                 onChange={(e) => setJourneymanCount(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
                 onBlur={(e) => { if (e.target.value === "") setJourneymanCount(0) }}
                 className="bg-input border-border text-center"
+                placeholder="0"
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Apprentices</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Apprentice Yr 1</label>
               <Input
                 type="number"
                 min="0"
-                value={apprenticeCount || ""}
-                onChange={(e) => setApprenticeCount(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
-                onBlur={(e) => { if (e.target.value === "") setApprenticeCount(0) }}
+                value={apprenticeYear1Count || ""}
+                onChange={(e) => setApprenticeYear1Count(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
+                onBlur={(e) => { if (e.target.value === "") setApprenticeYear1Count(0) }}
                 className="bg-input border-border text-center"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Apprentice Yr 2</label>
+              <Input
+                type="number"
+                min="0"
+                value={apprenticeYear2Count || ""}
+                onChange={(e) => setApprenticeYear2Count(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
+                onBlur={(e) => { if (e.target.value === "") setApprenticeYear2Count(0) }}
+                className="bg-input border-border text-center"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Apprentice Yr 3</label>
+              <Input
+                type="number"
+                min="0"
+                value={apprenticeYear3Count || ""}
+                onChange={(e) => setApprenticeYear3Count(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)}
+                onBlur={(e) => { if (e.target.value === "") setApprenticeYear3Count(0) }}
+                className="bg-input border-border text-center"
+                placeholder="0"
               />
             </div>
           </div>
@@ -611,36 +1491,48 @@ export function DailyReports() {
             <Wrench className="h-4 w-4" />
             Equipment Used
           </label>
-          <div className="flex gap-2 mb-2">
-            <Input
-              placeholder="Add equipment..."
-              value={newEquipment}
-              onChange={(e) => setNewEquipment(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addEquipmentItem())}
-              className="bg-input border-border"
-            />
-            <Button variant="outline" size="sm" onClick={addEquipmentItem} className="shrink-0">
-              <Plus className="h-4 w-4" />
-            </Button>
+          
+          {/* Equipment Selection from Master List */}
+          <div className="bg-input border border-border rounded-lg p-3 mb-2">
+            {Object.entries(getEquipmentByType()).map(([type, items]) => (
+              <div key={type} className="mb-3 last:mb-0">
+                <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">{type}s</p>
+                <div className="flex flex-col gap-1.5">
+                  {items.map((eq) => {
+                    const isSelected = equipment.includes(eq.name)
+                    return (
+                      <label
+                        key={eq.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-md cursor-pointer transition-colors ${
+                          isSelected ? "bg-primary/10 border border-primary/30" : "bg-card hover:bg-secondary/50 border border-transparent"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEquipment([...equipment, eq.name])
+                            } else {
+                              setEquipment(equipment.filter(item => item !== eq.name))
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-foreground">{eq.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
+          
+          {/* Show selected equipment count */}
           {equipment.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {equipment.map((item, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-secondary rounded-md text-sm"
-                >
-                  {item}
-                  <button
-                    type="button"
-                    onClick={() => removeEquipmentItem(index)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {equipment.length} machine{equipment.length !== 1 ? 's' : ''} selected
+            </p>
           )}
         </div>
 
@@ -659,30 +1551,39 @@ export function DailyReports() {
         </div>
       </Card>
 
-      {/* Worker Breakdown */}
-      {weeklyReport && weeklyReport.workerTotals.length > 0 && (
+      {/* Worker Breakdown - Daily (Selected Day Only) */}
+      {dailyTotals && dailyTotals.workers.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-foreground px-1">Worker Breakdown</h3>
-          {weeklyReport.workerTotals.map((worker) => (
+          <div className="flex items-center gap-2 px-1">
+            <h3 className="text-sm font-semibold text-foreground">
+              Daily Worker Hours
+            </h3>
+            <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+              {selectedDay?.dayName} {selectedDay?.dayNum} only
+            </span>
+          </div>
+          {dailyTotals.workers
+            .filter(worker => worker.status !== "Absent")
+            .map((worker) => (
             <Card key={worker.workerId} className="p-4 bg-card border-border">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="font-medium text-foreground">{worker.workerName}</p>
                   <p className="text-sm text-muted-foreground">{worker.workerTrade}</p>
                 </div>
-                <span className="text-lg font-bold text-foreground">{worker.weeklyTotal} hrs</span>
+                <span className="text-lg font-bold text-foreground">{worker.dailyTotal} hrs</span>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-primary/10 rounded-lg p-2">
-                  <p className="text-lg font-semibold text-primary">{worker.weeklyST}</p>
+                  <p className="text-lg font-semibold text-primary">{worker.dailyST}</p>
                   <p className="text-xs text-muted-foreground">ST</p>
                 </div>
                 <div className="bg-chart-3/10 rounded-lg p-2">
-                  <p className="text-lg font-semibold text-chart-3">{worker.weeklyOT}</p>
+                  <p className="text-lg font-semibold text-chart-3">{worker.dailyOT}</p>
                   <p className="text-xs text-muted-foreground">OT</p>
                 </div>
                 <div className="bg-destructive/10 rounded-lg p-2">
-                  <p className="text-lg font-semibold text-destructive">{worker.weeklyDT}</p>
+                  <p className="text-lg font-semibold text-destructive">{worker.dailyDT}</p>
                   <p className="text-xs text-muted-foreground">DT</p>
                 </div>
               </div>
@@ -691,11 +1592,50 @@ export function DailyReports() {
         </div>
       )}
 
-      {/* Empty State */}
-      {(!weeklyReport || weeklyReport.workerTotals.length === 0) && (
-        <Card className="p-8 bg-card border-border text-center">
-          <p className="text-muted-foreground">No timesheet data for this week. Add entries in the Timesheet tab.</p>
-        </Card>
+      {/* Daily Empty State */}
+          {(!dailyTotals || dailyTotals.workers.filter(w => w.status !== "Absent").length === 0) && !isLoading && (
+            <Card className="p-8 bg-card border-border text-center">
+              <p className="text-muted-foreground">
+                No timesheet entries for {selectedDay?.dayName || "this day"}. Add entries in the Timesheet tab.
+              </p>
+            </Card>
+          )}
+
+          {/* Save Changes Button */}
+          <Button 
+            className={`h-14 font-semibold text-base ${
+              saveStatus === "saved" 
+                ? "bg-chart-3 hover:bg-chart-3/90 text-primary-foreground" 
+                : saveStatus === "error"
+                ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+            }`}
+            onClick={handleSaveFieldReport}
+            disabled={isSavingReport}
+          >
+            {saveStatus === "saving" ? (
+              <>
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : saveStatus === "saved" ? (
+              <>
+                <Save className="h-5 w-5 mr-2" />
+                Saved!
+              </>
+            ) : saveStatus === "error" ? (
+              <>
+                <AlertTriangle className="h-5 w-5 mr-2" />
+                Error Saving
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </>
       )}
 
       {/* Refresh Button */}
