@@ -189,7 +189,8 @@ export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promis
       existing.weeklyOT += ot
       existing.weeklyDT += dt
     } else {
-      const worker = entry.worker as { id: string; name: string; trade: string } | null
+const workerData = entry.worker as { id: string; name: string; trade: string } | { id: string; name: string; trade: string }[] | null
+      const worker = Array.isArray(workerData) ? workerData[0] : workerData
       workerMap.set(entry.worker_id, {
         workerId: entry.worker_id,
         workerName: worker?.name || "Unknown",
