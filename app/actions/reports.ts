@@ -308,7 +308,8 @@ export async function getDailyWorkerTotals(weekStart: string, workDate: string):
     totalOT += ot
     totalDT += dt
 
-    const worker = entry.worker as { id: string; name: string; trade: string } | null
+    const workerData = Array.isArray(entry.worker) ? entry.worker[0] : entry.worker
+    const worker = workerData as { id: string; name: string; trade: string } | null
     workers.push({
       workerId: entry.worker_id,
       workerName: worker?.name || "Unknown",
@@ -727,12 +728,13 @@ export async function getWeeklyPDFData(weekStartDate: Date): Promise<WeeklyPDFDa
     const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
     const workDate = (entry as { work_date?: string }).work_date || ""
 
-    const worker = entry.worker as { id: string; name: string; trade: string; level?: string } | null
+    const workerRaw = Array.isArray(entry.worker) ? entry.worker[0] : entry.worker
+    const worker = workerRaw as { id: string; name: string; trade: string; level?: string } | null
     const workerLevel = worker?.level || "Journeyman"
 
-    let workerData = workerMap.get(entry.worker_id)
-    if (!workerData) {
-      workerData = {
+    let workerEntry = workerMap.get(entry.worker_id)
+    if (!workerEntry) {
+      workerEntry = {
         workerId: entry.worker_id,
         workerName: worker?.name || "Unknown",
         workerLevel,
@@ -743,15 +745,15 @@ export async function getWeeklyPDFData(weekStartDate: Date): Promise<WeeklyPDFDa
         totalDT: 0,
         totalHours: 0,
       }
-      workerMap.set(entry.worker_id, workerData)
+      workerMap.set(entry.worker_id, workerEntry)
     }
 
     // Add daily hours
-    workerData.dailyHours[workDate] = { st, ot, dt }
-    workerData.totalST += st
-    workerData.totalOT += ot
-    workerData.totalDT += dt
-    workerData.totalHours += st + ot + dt
+    workerEntry.dailyHours[workDate] = { st, ot, dt }
+    workerEntry.totalST += st
+    workerEntry.totalOT += ot
+    workerEntry.totalDT += dt
+    workerEntry.totalHours += st + ot + dt
   }
 
   // Calculate totals
