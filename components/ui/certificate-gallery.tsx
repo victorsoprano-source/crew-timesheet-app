@@ -208,7 +208,7 @@ export function CertificateGallery({
             </div>
             <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
               status === "valid" ? "bg-green-500/20 text-green-400" :
-              status === "expiring" ? "bg-yellow-500/20 text-yellow-400" :
+              status === "expiring-soon" ? "bg-yellow-500/20 text-yellow-400" :
               status === "expired" ? "bg-red-500/20 text-red-400" :
               "bg-gray-500/20 text-gray-400"
             }`}>

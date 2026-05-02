@@ -124,7 +124,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
     }
   }
 
-  const getStatusLabel = (status: Worker["status"]) => {
+  const getWorkerStatusLabel = (status: Worker["status"]) => {
     switch (status) {
       case "active":
         return "Active"
@@ -602,7 +602,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
                   handleStatusChange(worker.id, nextStatus)
                 }}
               >
-                {getStatusLabel(worker.status)}
+                {getWorkerStatusLabel(worker.status)}
               </Badge>
             </div>
 
@@ -1200,7 +1200,7 @@ export function CrewList({ onNavigate }: CrewListProps) {
                   variant="outline" 
                   className={getStatusColor(viewingWorker.status)}
                 >
-                  {getStatusLabel(viewingWorker.status)}
+                  {getWorkerStatusLabel(viewingWorker.status)}
                 </Badge>
               </div>
 

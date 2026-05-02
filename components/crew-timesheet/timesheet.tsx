@@ -44,6 +44,8 @@ const MOCK_WORKER = {
   phone: "",
   status: "active" as const,
   certifications: [],
+  photo_pathname: null,
+  level: "Journeyman" as const,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 }
@@ -637,7 +639,7 @@ return { ...e, [field]: value }
                           className="relative w-9 h-9 rounded border border-border overflow-hidden hover:opacity-80 transition-opacity"
                         >
                           <img
-                            src={getPhotoUrl(entry.photoRefId)}
+                            src={getPhotoUrl(entry.photoRefId) || undefined}
                             alt="Entry photo"
                             className="w-full h-full object-cover"
                           />
