@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
     let timesheetId: string | null = null
     try {
       const timesheetResult = await withTimeout(
-        supabase.from("timesheets").select("id").eq("week_start", weekStart).single(),
+        (async () => supabase.from("timesheets").select("id").eq("week_start", weekStart).single())(),
         10000,
         "Timesheet query"
       )
