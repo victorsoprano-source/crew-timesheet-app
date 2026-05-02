@@ -200,7 +200,8 @@ export async function GET(request: NextRequest) {
         if (entriesResult.data && Array.isArray(entriesResult.data)) {
           for (const entry of entriesResult.data) {
             // Safely extract worker data
-            const workerData = entry.worker as { id?: string; name?: string; level?: string } | null
+            const workerRaw = Array.isArray(entry.worker) ? entry.worker[0] : entry.worker
+            const workerData = workerRaw as { id?: string; name?: string; level?: string } | null
             const workerName = workerData?.name || "Unknown Worker"
             const workerLevel = workerData?.level || "Journeyman"
             

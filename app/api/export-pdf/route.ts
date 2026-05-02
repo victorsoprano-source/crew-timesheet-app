@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     // Find timesheet
     const timesheetResult = await withTimeout(
-      supabase.from("timesheets").select("id").eq("week_start", weekStart).single(),
+      (async () => supabase.from("timesheets").select("id").eq("week_start", weekStart).single())(),
       10000,
       "Timesheet query"
     )
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     // Get entries
     const entriesResult = await withTimeout(
-      supabase
+      (async () => supabase
         .from("timesheet_entries")
         .select(`
           worker_id,
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           attendance_status,
           worker:workers(id, name)
         `)
-        .eq("timesheet_id", timesheetResult.data.id),
+        .eq("timesheet_id", timesheetResult.data.id))(),
       10000,
       "Entries query"
     )
@@ -82,7 +82,8 @@ export async function GET(request: NextRequest) {
       const dt = isAbsent ? 0 : (Number(entry.double_time_hours) || 0)
       const total = st + ot + dt
 
-      const worker = entry.worker as { id: string; name: string } | null
+      const workerRaw = Array.isArray(entry.worker) ? entry.worker[0] : entry.worker
+        const worker = workerRaw as { id: string; name: string } | null
       const workerName = worker?.name || "Unknown"
 
       const existing = workerMap.get(entry.worker_id)
