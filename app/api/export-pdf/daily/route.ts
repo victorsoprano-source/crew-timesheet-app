@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
       console.log("[v0] Querying entries for timesheet_id:", timesheetId, "work_date:", workDate)
       try {
         const entriesResult = await withTimeout(
-          supabase
+          (async () => supabase
             .from("timesheet_entries")
             .select(`
               worker_id,
@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
               worker:workers(id, name, level)
             `)
             .eq("timesheet_id", timesheetId)
-            .eq("work_date", workDate),
+            .eq("work_date", workDate))(),
           10000,
           "Entries query"
         )
@@ -251,12 +251,12 @@ export async function GET(request: NextRequest) {
 
     try {
       const fieldReportResult = await withTimeout(
-        supabase
+        (async () => supabase
           .from("daily_field_reports")
           .select("work_performed, journeyman_count, apprentice_year1_count, apprentice_year2_count, apprentice_year3_count, equipment, problems_notes")
           .eq("week_start", weekStart)
           .eq("work_date", workDate)
-          .single(),
+          .single())(),
         10000,
         "Field report query"
       )
