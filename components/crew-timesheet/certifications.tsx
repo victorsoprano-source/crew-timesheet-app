@@ -333,7 +333,7 @@ export function Certifications() {
                       className="shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-border hover:opacity-90"
                     >
                       <img
-                        src={getPhotoUrl(cert.photo_pathname)}
+                        src={cert.photo_pathname ? getPhotoUrl(cert.photo_pathname) || undefined : undefined}
                         alt={cert.certification_type}
                         className="w-full h-full object-cover"
                       />
