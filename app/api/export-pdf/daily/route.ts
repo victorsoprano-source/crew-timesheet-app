@@ -421,15 +421,12 @@ async function generateDailyPDF(
   })
   y -= 16
 
-  // Job, Date, Foreman row
+  // Job and Date row
   page.drawText("Job:", { x: margin, y, size: 10, font: helveticaBold, color: black })
   page.drawText("C34921R", { x: margin + 28, y, size: 10, font: helvetica, color: black })
   
-  page.drawText("Date:", { x: margin + 150, y, size: 10, font: helveticaBold, color: black })
-  page.drawText(`${dayName}, ${formattedDate}`, { x: margin + 180, y, size: 10, font: helvetica, color: black })
-  
-  page.drawText("Foreman:", { x: margin + 380, y, size: 10, font: helveticaBold, color: black })
-  page.drawText("_________________", { x: margin + 430, y, size: 10, font: helvetica, color: black })
+  page.drawText("Date:", { x: margin + 280, y, size: 10, font: helveticaBold, color: black })
+  page.drawText(`${dayName}, ${formattedDate}`, { x: margin + 310, y, size: 10, font: helvetica, color: black })
   y -= 20
 
   console.log("[v0] Drawing Daily Hours Summary section...")
@@ -633,9 +630,9 @@ async function generateDailyPDF(
   y -= 15
 
   console.log("[v0] Drawing footer...")
-  // ========== FOOTER - SIGNATURE SECTION ==========
-  checkPageBreak(80)
-  y -= 10
+  // ========== FOOTER ==========
+  checkPageBreak(50)
+  y -= 20
   
   // Draw separator line
   page.drawLine({
@@ -646,51 +643,15 @@ async function generateDailyPDF(
   })
   y -= 25
   
-  // Foreman Name field
-  page.drawText("Foreman Name:", { x: margin, y, size: 10, font: helveticaBold, color: black })
-  page.drawLine({
-    start: { x: margin + 90, y: y - 2 },
-    end: { x: margin + 280, y: y - 2 },
-    thickness: 0.5,
-    color: black,
-  })
-  
-  // Date field (right side)
-  page.drawText("Date:", { x: margin + 320, y, size: 10, font: helveticaBold, color: black })
-  page.drawLine({
-    start: { x: margin + 355, y: y - 2 },
-    end: { x: pageWidth - margin, y: y - 2 },
-    thickness: 0.5,
-    color: black,
-  })
-  y -= 25
-  
-  // Signature field
-  page.drawText("Signature:", { x: margin, y, size: 10, font: helveticaBold, color: black })
-  page.drawLine({
-    start: { x: margin + 65, y: y - 2 },
-    end: { x: margin + 280, y: y - 2 },
-    thickness: 0.5,
-    color: black,
-  })
-  y -= 30
-  
-  // Generated timestamp (small, bottom)
-  page.drawText(`Generated: ${new Date().toLocaleString("en-US")}`, {
-    x: margin,
+  // Centered "RIGGING CREW" text
+  const footerText = "RIGGING CREW"
+  const footerTextWidth = helveticaBold.widthOfTextAtSize(footerText, 12)
+  page.drawText(footerText, {
+    x: (pageWidth - footerTextWidth) / 2,
     y,
-    size: 7,
-    font: helvetica,
-    color: darkGray,
-  })
-  
-  // Page indicator
-  page.drawText("Page 1 of 1", {
-    x: pageWidth - margin - 45,
-    y,
-    size: 7,
-    font: helvetica,
-    color: darkGray,
+    size: 12,
+    font: helveticaBold,
+    color: black,
   })
 
   // Save PDF
