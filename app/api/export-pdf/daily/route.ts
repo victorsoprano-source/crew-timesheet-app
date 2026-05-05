@@ -330,12 +330,10 @@ async function generateDailyPDF(
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-  // Colors
+  // Colors - Clean black & white professional style
   const black = rgb(0, 0, 0)
   const darkGray = rgb(0.3, 0.3, 0.3)
-  const lightGray = rgb(0.85, 0.85, 0.85)
-  const headerBg = rgb(0.15, 0.15, 0.2)
-  const white = rgb(1, 1, 1)
+  const lightGray = rgb(0.92, 0.92, 0.92)
 
   // Page dimensions (Letter Portrait)
   const pageWidth = 612
@@ -356,24 +354,25 @@ async function generateDailyPDF(
     return false
   }
 
-  // Helper to draw section header
+  // Helper to draw section header with line
   const drawSectionHeader = (title: string) => {
-    checkPageBreak(30)
-    page.drawRectangle({
-      x: margin,
-      y: y - 18,
-      width: contentWidth,
-      height: 22,
-      color: headerBg,
-    })
+    checkPageBreak(25)
+    y -= 8
     page.drawText(title, {
-      x: margin + 8,
-      y: y - 13,
+      x: margin,
+      y,
       size: 11,
       font: helveticaBold,
-      color: white,
+      color: black,
     })
-    y -= 28
+    y -= 4
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: pageWidth - margin, y },
+      thickness: 1,
+      color: black,
+    })
+    y -= 12
   }
 
   // Format date safely
@@ -389,72 +388,119 @@ async function generateDailyPDF(
 
   console.log("[v0] Drawing header...")
   // ========== HEADER ==========
-  page.drawText("AHERN PAINTING CONT., INC.", {
+  page.drawText("Ahern Painting Cont., Inc.", {
     x: margin,
     y,
-    size: 18,
+    size: 16,
     font: helveticaBold,
     color: black,
   })
-  y -= 22
+  y -= 18
 
   page.drawText("DAILY FIELD REPORT", {
     x: margin,
     y,
-    size: 14,
+    size: 12,
     font: helveticaBold,
     color: black,
   })
-  y -= 20
+  y -= 5
 
-  // Divider line under header
+  // Double line under title
   page.drawLine({
-    start: { x: margin, y: y + 5 },
-    end: { x: pageWidth - margin, y: y + 5 },
+    start: { x: margin, y },
+    end: { x: pageWidth - margin, y },
     thickness: 1.5,
     color: black,
   })
-  y -= 8
+  page.drawLine({
+    start: { x: margin, y: y - 2 },
+    end: { x: pageWidth - margin, y: y - 2 },
+    thickness: 0.5,
+    color: black,
+  })
+  y -= 16
 
-  // Job and Date info - aligned
-  page.drawText("Job:", {
-    x: margin,
-    y,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  })
-  page.drawText("C34921R", {
-    x: margin + 30,
-    y,
-    size: 10,
-    font: helvetica,
-    color: black,
-  })
+  // Job, Date, Foreman row
+  page.drawText("Job:", { x: margin, y, size: 10, font: helveticaBold, color: black })
+  page.drawText("C34921R", { x: margin + 28, y, size: 10, font: helvetica, color: black })
   
-  page.drawText("Date:", {
-    x: margin + 280,
-    y,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  })
-  page.drawText(`${dayName}, ${formattedDate}`, {
-    x: margin + 315,
-    y,
-    size: 10,
-    font: helvetica,
-    color: black,
-  })
-  y -= 25
+  page.drawText("Date:", { x: margin + 150, y, size: 10, font: helveticaBold, color: black })
+  page.drawText(`${dayName}, ${formattedDate}`, { x: margin + 180, y, size: 10, font: helvetica, color: black })
+  
+  page.drawText("Foreman:", { x: margin + 380, y, size: 10, font: helveticaBold, color: black })
+  page.drawText("_________________", { x: margin + 430, y, size: 10, font: helvetica, color: black })
+  y -= 20
+
+  console.log("[v0] Drawing Daily Hours Summary section...")
+  // ========== SECTION 1: DAILY HOURS SUMMARY (TOP PRIORITY) ==========
+  drawSectionHeader("DAILY HOURS SUMMARY")
+  
+  const totalHours = totalST + totalOT + totalDT
+  
+  // Draw hours in one row with boxes
+  const boxWidth = (contentWidth - 30) / 4
+  const boxHeight = 40
+  const boxY = y - boxHeight + 10
+  
+  const hoursData = [
+    { label: "ST Hours", value: totalST.toFixed(1) },
+    { label: "OT Hours", value: totalOT.toFixed(1) },
+    { label: "DT Hours", value: totalDT.toFixed(1) },
+    { label: "TOTAL", value: totalHours.toFixed(1) },
+  ]
+  
+  for (let i = 0; i < hoursData.length; i++) {
+    const boxX = margin + i * (boxWidth + 10)
+    
+    // Box background - last one (TOTAL) gets gray background
+    if (i === 3) {
+      page.drawRectangle({
+        x: boxX,
+        y: boxY,
+        width: boxWidth,
+        height: boxHeight,
+        color: lightGray,
+      })
+    }
+    
+    // Box border
+    page.drawRectangle({
+      x: boxX,
+      y: boxY,
+      width: boxWidth,
+      height: boxHeight,
+      borderColor: black,
+      borderWidth: 1,
+    })
+    
+    // Label
+    const labelWidth = helvetica.widthOfTextAtSize(hoursData[i].label, 9)
+    page.drawText(hoursData[i].label, {
+      x: boxX + (boxWidth - labelWidth) / 2,
+      y: boxY + boxHeight - 12,
+      size: 9,
+      font: helvetica,
+      color: darkGray,
+    })
+    
+    // Value (larger, bold, centered)
+    const valueWidth = helveticaBold.widthOfTextAtSize(hoursData[i].value, 16)
+    page.drawText(hoursData[i].value, {
+      x: boxX + (boxWidth - valueWidth) / 2,
+      y: boxY + 8,
+      size: 16,
+      font: helveticaBold,
+      color: black,
+    })
+  }
+  y = boxY - 15
 
   console.log("[v0] Drawing Work Performed section...")
-  // ========== WORK PERFORMED ==========
-  drawSectionHeader("WORK PERFORMED")
+  // ========== SECTION 2: WORK PERFORMED TODAY ==========
+  drawSectionHeader("WORK PERFORMED TODAY")
   
-  // Split work performed into bullet points (by periods or newlines)
   const workText = sanitizeText(fieldReport.work_performed) || "No work description provided."
-  // Split by common separators and filter empty items
   const workItems = workText
     .split(/[.;]/)
     .map(item => item.trim())
@@ -462,283 +508,87 @@ async function generateDailyPDF(
   
   if (workItems.length > 0) {
     for (const item of workItems) {
-      const bulletLines = wrapText(item, helvetica, 10, contentWidth - 30)
+      const bulletLines = wrapText(item, helvetica, 10, contentWidth - 25)
       for (let i = 0; i < bulletLines.length; i++) {
         checkPageBreak(14)
         if (i === 0) {
-          // First line gets bullet
-          page.drawText("\u2022", {
-            x: margin + 8,
-            y,
-            size: 10,
-            font: helvetica,
-            color: black,
-          })
+          page.drawText("-", { x: margin + 5, y, size: 10, font: helveticaBold, color: black })
         }
-        page.drawText(bulletLines[i], {
-          x: margin + 22,
-          y,
-          size: 10,
-          font: helvetica,
-          color: black,
-        })
+        page.drawText(bulletLines[i], { x: margin + 18, y, size: 10, font: helvetica, color: black })
         y -= 14
       }
     }
   } else {
-    // Single line if no separators found
-    const workLines = wrapText(workText, helvetica, 10, contentWidth - 30)
+    const workLines = wrapText(workText, helvetica, 10, contentWidth - 25)
     for (let i = 0; i < workLines.length; i++) {
       checkPageBreak(14)
       if (i === 0) {
-        page.drawText("\u2022", {
-          x: margin + 8,
-          y,
-          size: 10,
-          font: helvetica,
-          color: black,
-        })
+        page.drawText("-", { x: margin + 5, y, size: 10, font: helveticaBold, color: black })
       }
-      page.drawText(workLines[i], {
-        x: margin + 22,
-        y,
-        size: 10,
-        font: helvetica,
-        color: black,
-      })
+      page.drawText(workLines[i], { x: margin + 18, y, size: 10, font: helvetica, color: black })
       y -= 14
     }
   }
-  y -= 10
+  y -= 5
 
   console.log("[v0] Drawing Crew Summary section...")
-  // ========== CREW SUMMARY ==========
+  // ========== SECTION 3: CREW SUMMARY ==========
   drawSectionHeader("CREW SUMMARY")
   
   const totalCrew = fieldReport.journeyman_count + fieldReport.apprentice_year1_count + 
                     fieldReport.apprentice_year2_count + fieldReport.apprentice_year3_count
 
-  const crewItems = [
-    { label: "Journeymen", value: fieldReport.journeyman_count },
-    { label: "Apprentice Year 1", value: fieldReport.apprentice_year1_count },
-    { label: "Apprentice Year 2", value: fieldReport.apprentice_year2_count },
-    { label: "Apprentice Year 3", value: fieldReport.apprentice_year3_count },
+  // Two-column layout for crew counts
+  const crewCol1 = [
+    { label: "Journeyman (JM)", value: fieldReport.journeyman_count },
+    { label: "Apprentice Year 1 (APP1)", value: fieldReport.apprentice_year1_count },
+  ]
+  const crewCol2 = [
+    { label: "Apprentice Year 2 (APP2)", value: fieldReport.apprentice_year2_count },
+    { label: "Apprentice Year 3 (APP3)", value: fieldReport.apprentice_year3_count },
   ]
 
-  for (const item of crewItems) {
+  // Draw two columns
+  for (let row = 0; row < 2; row++) {
     checkPageBreak(14)
-    page.drawText(`${item.label}:`, {
-      x: margin + 8,
-      y,
-      size: 10,
-      font: helvetica,
-      color: black,
-    })
-    page.drawText(String(item.value), {
-      x: margin + 150,
-      y,
-      size: 10,
-      font: helveticaBold,
-      color: black,
-    })
+    // Column 1
+    page.drawText(`${crewCol1[row].label}:`, { x: margin + 5, y, size: 10, font: helvetica, color: black })
+    page.drawText(String(crewCol1[row].value), { x: margin + 175, y, size: 10, font: helveticaBold, color: black })
+    // Column 2
+    page.drawText(`${crewCol2[row].label}:`, { x: margin + 260, y, size: 10, font: helvetica, color: black })
+    page.drawText(String(crewCol2[row].value), { x: margin + 430, y, size: 10, font: helveticaBold, color: black })
     y -= 14
   }
   
-  // Total crew
-  checkPageBreak(18)
+  // Total crew with highlight
+  checkPageBreak(20)
   page.drawRectangle({
-    x: margin + 4,
-    y: y - 2,
+    x: margin,
+    y: y - 4,
     width: 200,
-    height: 16,
+    height: 18,
     color: lightGray,
   })
-  page.drawText("Total Crew:", {
-    x: margin + 8,
-    y,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  })
-  page.drawText(String(totalCrew), {
-    x: margin + 150,
-    y,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  })
+  page.drawText("Total Workers:", { x: margin + 5, y, size: 10, font: helveticaBold, color: black })
+  page.drawText(String(totalCrew), { x: margin + 100, y, size: 12, font: helveticaBold, color: black })
   y -= 20
-
-  console.log("[v0] Drawing Hours Summary section...")
-  // ========== HOURS SUMMARY ==========
-  drawSectionHeader("HOURS SUMMARY")
-  
-  const totalHours = totalST + totalOT + totalDT
-  const hoursItems = [
-    { label: "Regular Time (ST)", value: totalST.toFixed(1) },
-    { label: "Overtime (OT)", value: totalOT.toFixed(1) },
-    { label: "Double Time (DT)", value: totalDT.toFixed(1) },
-  ]
-
-  for (const item of hoursItems) {
-    checkPageBreak(14)
-    page.drawText(`${item.label}:`, {
-      x: margin + 8,
-      y,
-      size: 10,
-      font: helvetica,
-      color: black,
-    })
-    page.drawText(item.value, {
-      x: margin + 150,
-      y,
-      size: 10,
-      font: helveticaBold,
-      color: black,
-    })
-    y -= 14
-  }
-  
-  // Total hours
-  checkPageBreak(18)
-  page.drawRectangle({
-    x: margin + 4,
-    y: y - 2,
-    width: 200,
-    height: 16,
-    color: lightGray,
-  })
-  page.drawText("Total Hours:", {
-    x: margin + 8,
-    y,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  })
-  page.drawText(totalHours.toFixed(1), {
-    x: margin + 150,
-    y,
-    size: 10,
-    font: helveticaBold,
-    color: black,
-  })
-  y -= 20
-
-  console.log("[v0] Drawing Worker Breakdown section...")
-  // ========== WORKER BREAKDOWN ==========
-  drawSectionHeader("WORKER BREAKDOWN")
-  
-  if (workers.length > 0) {
-    // Define fixed column positions for perfect alignment
-    const colName = margin + 4
-    const colST = margin + 250
-    const colOT = margin + 310
-    const colDT = margin + 370
-    const colTotal = margin + 430
-    const colStatus = margin + 490
-    
-    // Table header row
-    checkPageBreak(20)
-    page.drawRectangle({
-      x: margin,
-      y: y - 14,
-      width: contentWidth,
-      height: 18,
-      color: lightGray,
-    })
-    
-    // Header labels - bold and centered where needed
-    page.drawText("NAME", { x: colName, y: y - 10, size: 9, font: helveticaBold, color: black })
-    page.drawText("ST", { x: colST + 5, y: y - 10, size: 9, font: helveticaBold, color: black })
-    page.drawText("OT", { x: colOT + 5, y: y - 10, size: 9, font: helveticaBold, color: black })
-    page.drawText("DT", { x: colDT + 5, y: y - 10, size: 9, font: helveticaBold, color: black })
-    page.drawText("TOTAL", { x: colTotal, y: y - 10, size: 9, font: helveticaBold, color: black })
-    page.drawText("STATUS", { x: colStatus, y: y - 10, size: 9, font: helveticaBold, color: black })
-    y -= 22
-
-    // Draw separator line under header
-    page.drawLine({
-      start: { x: margin, y: y + 6 },
-      end: { x: pageWidth - margin, y: y + 6 },
-      thickness: 0.5,
-      color: darkGray,
-    })
-
-    // Worker rows with alternating subtle background
-    let rowIndex = 0
-    for (const worker of workers) {
-      checkPageBreak(18)
-      
-      // Alternate row shading for readability
-      if (rowIndex % 2 === 1) {
-        page.drawRectangle({
-          x: margin,
-          y: y - 4,
-          width: contentWidth,
-          height: 16,
-          color: rgb(0.95, 0.95, 0.95),
-        })
-      }
-      
-      // Worker name with classification
-      const workerLabel = sanitizeText(`${worker.name} (${worker.levelAbbr})`)
-      page.drawText(truncateText(workerLabel, helvetica, 9, 240), { x: colName, y, size: 9, font: helvetica, color: black })
-      
-      // Hours - right-aligned for numbers
-      const stText = worker.st.toFixed(1)
-      const otText = worker.ot.toFixed(1)
-      const dtText = worker.dt.toFixed(1)
-      const totalText = worker.total.toFixed(1)
-      
-      page.drawText(stText, { x: colST + 10 - helvetica.widthOfTextAtSize(stText, 9) / 2, y, size: 9, font: helvetica, color: black })
-      page.drawText(otText, { x: colOT + 10 - helvetica.widthOfTextAtSize(otText, 9) / 2, y, size: 9, font: helvetica, color: black })
-      page.drawText(dtText, { x: colDT + 10 - helvetica.widthOfTextAtSize(dtText, 9) / 2, y, size: 9, font: helvetica, color: black })
-      page.drawText(totalText, { x: colTotal + 10 - helveticaBold.widthOfTextAtSize(totalText, 9) / 2, y, size: 9, font: helveticaBold, color: black })
-      
-      // Status
-      page.drawText(worker.status, { x: colStatus, y, size: 9, font: helvetica, color: black })
-      
-      y -= 16
-      rowIndex++
-    }
-    
-    // Draw bottom border line
-    page.drawLine({
-      start: { x: margin, y: y + 10 },
-      end: { x: pageWidth - margin, y: y + 10 },
-      thickness: 0.5,
-      color: darkGray,
-    })
-  } else {
-    page.drawText("No worker data available for this day.", {
-      x: margin + 8,
-      y,
-      size: 10,
-      font: helvetica,
-      color: darkGray,
-    })
-    y -= 14
-  }
-  y -= 15
 
   console.log("[v0] Drawing Equipment section...")
-  // ========== EQUIPMENT USED ==========
+  // ========== SECTION 4: EQUIPMENT USED ==========
   drawSectionHeader("EQUIPMENT USED")
   
   if (fieldReport.equipment.length > 0) {
     for (const item of fieldReport.equipment) {
       if (item && typeof item === "string") {
         checkPageBreak(14)
-        // Format: Equipment Name - ID: XXXXX (if item contains ID info)
         const sanitizedItem = sanitizeText(item)
-        // Check if item has ID pattern, format nicely
         let displayItem = sanitizedItem
         const idMatch = sanitizedItem.match(/^(.+?)\s*[-–]\s*(?:ID:?\s*)?(\d+)$/i)
         if (idMatch) {
           displayItem = `${idMatch[1]} - ID: ${idMatch[2]}`
         }
-        page.drawText(`\u2022  ${displayItem}`, {
-          x: margin + 8,
+        page.drawText(`-  ${displayItem}`, {
+          x: margin + 5,
           y,
           size: 10,
           font: helvetica,
@@ -749,7 +599,7 @@ async function generateDailyPDF(
     }
   } else {
     page.drawText("No equipment listed.", {
-      x: margin + 8,
+      x: margin + 5,
       y,
       size: 10,
       font: helvetica,
@@ -757,23 +607,22 @@ async function generateDailyPDF(
     })
     y -= 14
   }
-  y -= 10
+  y -= 5
 
   console.log("[v0] Drawing Notes section...")
-  // ========== PROBLEMS / NOTES ==========
-  drawSectionHeader("NOTES / ISSUES")
+  // ========== SECTION 5: PROBLEMS / NOTES ==========
+  drawSectionHeader("PROBLEMS / NOTES")
   
-  // Replace default "No notes recorded" with professional message
   let notesText = sanitizeText(fieldReport.problems_notes) || ""
   if (notesText === "No notes recorded." || notesText === "No notes recorded" || notesText === "") {
-    notesText = "No issues reported for this day."
+    notesText = "No issues reported."
   }
   
-  const notesLines = wrapText(notesText, helvetica, 10, contentWidth - 16)
+  const notesLines = wrapText(notesText, helvetica, 10, contentWidth - 10)
   for (const line of notesLines) {
     checkPageBreak(14)
     page.drawText(line, {
-      x: margin + 8,
+      x: margin + 5,
       y,
       size: 10,
       font: helvetica,
@@ -781,73 +630,65 @@ async function generateDailyPDF(
     })
     y -= 14
   }
-  y -= 10
-
-  // ========== PHOTOS (DISABLED) ==========
-  if (photoCount > 0) {
-    drawSectionHeader("PHOTOS")
-    page.drawText(`${photoCount} photo(s) available - photo embedding temporarily disabled.`, {
-      x: margin + 8,
-      y,
-      size: 10,
-      font: helvetica,
-      color: darkGray,
-    })
-    y -= 14
-  }
+  y -= 15
 
   console.log("[v0] Drawing footer...")
-  // ========== FOOTER ==========
-  checkPageBreak(60)
+  // ========== FOOTER - SIGNATURE SECTION ==========
+  checkPageBreak(80)
+  y -= 10
+  
+  // Draw separator line
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: pageWidth - margin, y },
+    thickness: 1,
+    color: black,
+  })
   y -= 25
   
-  // Signature line
+  // Foreman Name field
+  page.drawText("Foreman Name:", { x: margin, y, size: 10, font: helveticaBold, color: black })
   page.drawLine({
-    start: { x: margin, y: y },
-    end: { x: margin + 200, y: y },
+    start: { x: margin + 90, y: y - 2 },
+    end: { x: margin + 280, y: y - 2 },
     thickness: 0.5,
     color: black,
   })
-  y -= 12
-  page.drawText("Foreman / Supervisor Signature", {
-    x: margin,
-    y,
-    size: 8,
-    font: helvetica,
-    color: darkGray,
-  })
   
-  // Date line next to signature
+  // Date field (right side)
+  page.drawText("Date:", { x: margin + 320, y, size: 10, font: helveticaBold, color: black })
   page.drawLine({
-    start: { x: margin + 300, y: y + 12 },
-    end: { x: margin + 420, y: y + 12 },
+    start: { x: margin + 355, y: y - 2 },
+    end: { x: pageWidth - margin, y: y - 2 },
     thickness: 0.5,
     color: black,
   })
-  page.drawText("Date", {
-    x: margin + 300,
-    y,
-    size: 8,
-    font: helvetica,
-    color: darkGray,
-  })
-  
   y -= 25
   
-  // Generated timestamp
+  // Signature field
+  page.drawText("Signature:", { x: margin, y, size: 10, font: helveticaBold, color: black })
+  page.drawLine({
+    start: { x: margin + 65, y: y - 2 },
+    end: { x: margin + 280, y: y - 2 },
+    thickness: 0.5,
+    color: black,
+  })
+  y -= 30
+  
+  // Generated timestamp (small, bottom)
   page.drawText(`Generated: ${new Date().toLocaleString("en-US")}`, {
     x: margin,
     y,
-    size: 8,
+    size: 7,
     font: helvetica,
     color: darkGray,
   })
   
   // Page indicator
   page.drawText("Page 1 of 1", {
-    x: pageWidth - margin - 50,
+    x: pageWidth - margin - 45,
     y,
-    size: 8,
+    size: 7,
     font: helvetica,
     color: darkGray,
   })
