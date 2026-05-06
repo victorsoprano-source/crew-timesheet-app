@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUserTeam } from "@/app/actions/auth"
 
 export interface DashboardStats {
   workersToday: number
@@ -20,6 +21,7 @@ export interface DashboardStats {
 export async function getWorkersToday(dateStr: string): Promise<number> {
   try {
     const supabase = await createClient()
+    const team = await getCurrentUserTeam()
 
     // Calculate week start for this date (Wednesday-based week)
     const date = new Date(dateStr + "T00:00:00")
@@ -29,11 +31,12 @@ export async function getWorkersToday(dateStr: string): Promise<number> {
     weekStart.setDate(date.getDate() - diff)
     const weekStartStr = weekStart.toISOString().split("T")[0]
 
-    // Find the timesheet for this week
+    // Find the timesheet for this week and team
     const { data: timesheet, error: timesheetError } = await supabase
       .from("timesheets")
       .select("id")
       .eq("week_start", weekStartStr)
+      .eq("team", team)
       .single()
 
     if (timesheetError || !timesheet) {
@@ -81,6 +84,7 @@ export interface ActivityItem {
 export async function getDashboardStats(weekStartDate?: Date, selectedDayIndex?: number): Promise<DashboardStats> {
   try {
     const supabase = await createClient()
+    const team = await getCurrentUserTeam()
 
     // Calculate week start (Wednesday)
     const today = new Date()
@@ -113,11 +117,12 @@ export async function getDashboardStats(weekStartDate?: Date, selectedDayIndex?:
     const dayIndex = selectedDayIndex ?? 0
     const selectedDateStr = weekDays[dayIndex] || weekDays[0]
 
-    // Find the timesheet for this week
+    // Find the timesheet for this week and team
     const { data: timesheet } = await supabase
       .from("timesheets")
       .select("id")
       .eq("week_start", weekStartStr)
+      .eq("team", team)
       .single()
 
     let hoursLogged = 0

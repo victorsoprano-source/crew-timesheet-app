@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { getCurrentUserTeam } from "@/app/actions/auth"
 
 export type WorkerLevel = "Journeyman" | "Apprentice Year 1" | "Apprentice Year 2" | "Apprentice Year 3"
 
@@ -14,6 +15,7 @@ export interface Worker {
   level: WorkerLevel
   status: "active" | "off-site" | "on-leave"
   certifications: string[]
+  team: string
   created_at: string
   updated_at: string
 }
@@ -33,9 +35,12 @@ export interface WorkerCertification {
 
 export async function getWorkers(): Promise<Worker[]> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
+  
   const { data, error } = await supabase
     .from("workers")
     .select("*")
+    .eq("team", team)
     .order("name", { ascending: true })
 
   if (error) {
@@ -48,9 +53,12 @@ export async function getWorkers(): Promise<Worker[]> {
 
 export async function getActiveWorkers(): Promise<Worker[]> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
+  
   const { data, error } = await supabase
     .from("workers")
     .select("*")
+    .eq("team", team)
     .eq("status", "active")
     .order("name", { ascending: true })
 
@@ -64,9 +72,12 @@ export async function getActiveWorkers(): Promise<Worker[]> {
 
 export async function getWorkerStats() {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
+  
   const { data, error } = await supabase
     .from("workers")
     .select("status")
+    .eq("team", team)
 
   if (error) {
     console.error("Error fetching worker stats:", error)
@@ -99,6 +110,7 @@ export async function createWorker(formData: {
   documentedCertifications?: CertificationInput[]
 }): Promise<{ success: boolean; workerId?: string; error?: string }> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
 
   const { data: worker, error } = await supabase.from("workers").insert({
     name: formData.name,
@@ -108,6 +120,7 @@ export async function createWorker(formData: {
     photo_pathname: formData.photo_pathname || null,
     certifications: formData.certifications,
     status: "active",
+    team: team,
   }).select("id").single()
 
   if (error) {

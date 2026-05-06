@@ -8,13 +8,15 @@ import { Users, Clock, FileText, Plus, UserPlus, List, BarChart3, HardHat, Loade
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { getDashboardStats, getRecentActivity, type DashboardStats, type ActivityItem } from "@/app/actions/dashboard"
+import { type Team, getTeamDisplayName } from "@/lib/teams"
 
 interface DashboardProps {
   supervisorName: string
   onNavigate: (screen: string) => void
+  team: Team
 }
 
-export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
+export function Dashboard({ supervisorName, onNavigate, team }: DashboardProps) {
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [stats, setStats] = useState<DashboardStats>({ 
@@ -156,7 +158,7 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
           </Button>
         </div>
         <div className="flex items-center justify-between px-1">
-          <p className="text-sm font-medium text-foreground">Crew Timesheet</p>
+          <p className="text-sm font-bold text-accent">{getTeamDisplayName(team)}</p>
           <p className="text-sm font-medium text-muted-foreground">{formatWeekRange()}</p>
         </div>
       </div>
