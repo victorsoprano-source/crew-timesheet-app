@@ -1,0 +1,25 @@
+{
+  "name": "Crew Timesheet",
+  "short_name": "Crew",
+  "description": "Crew management and timesheet tracking for Ahern Painting Contractors Inc.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b2f1f",
+  "theme_color": "#0b2f1f",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-512x512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.jpg",
+      "sizes": "180x180",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
