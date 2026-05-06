@@ -46,6 +46,7 @@ const MOCK_WORKER = {
   certifications: [],
   photo_pathname: null,
   level: "Journeyman" as const,
+  team: "RIGGING",
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 }
