@@ -4,7 +4,9 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users, Clock, FileText, Plus, UserPlus, List, BarChart3, HardHat, Loader2 } from "lucide-react"
+import { Users, Clock, FileText, Plus, UserPlus, List, BarChart3, HardHat, Loader2, LogOut } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 import { getDashboardStats, getRecentActivity, type DashboardStats, type ActivityItem } from "@/app/actions/dashboard"
 
 interface DashboardProps {
@@ -13,6 +15,8 @@ interface DashboardProps {
 }
 
 export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
+  const router = useRouter()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [stats, setStats] = useState<DashboardStats>({ 
     workersToday: 0,
     presentCount: 0,
@@ -70,6 +74,20 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
     loadData()
   }, [])
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      router.push('/auth/login')
+      router.refresh()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
   const formatWeekRange = () => {
     if (!stats.weekStart || !stats.weekEnd) return "This Week"
     const start = new Date(stats.weekStart + "T00:00:00")
@@ -122,6 +140,20 @@ export function Dashboard({ supervisorName, onNavigate }: DashboardProps) {
             <h1 className="text-lg font-bold text-primary">Ahern Painting Contractors Inc.</h1>
             <p className="text-xs text-muted-foreground">Welcome, {supervisorName}</p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="text-muted-foreground hover:text-foreground hover:bg-secondary"
+            title="Sign Out"
+          >
+            {isLoggingOut ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <LogOut className="h-5 w-5" />
+            )}
+          </Button>
         </div>
         <div className="flex items-center justify-between px-1">
           <p className="text-sm font-medium text-foreground">Crew Timesheet</p>
