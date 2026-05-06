@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { getCurrentUserTeam } from "@/app/actions/auth"
 
 export interface DailyReport {
   id: string
@@ -84,19 +85,19 @@ export interface DailyWorkerTotals {
 // Get weekly totals from real timesheet data
 export async function getWeeklyTotalsFromTimesheets(weekStartDate: Date): Promise<WeeklyTotalsReport | null> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
   
   const weekStartStr = weekStartDate.toISOString().split("T")[0]
   const weekEnd = new Date(weekStartDate)
   weekEnd.setDate(weekEnd.getDate() + 6)
   const weekEndStr = weekEnd.toISOString().split("T")[0]
 
-  
-
-  // Find the timesheet for this week
+  // Find the timesheet for this week and team
   const { data: timesheet, error: timesheetError } = await supabase
     .from("timesheets")
     .select("id")
     .eq("week_start", weekStartStr)
+    .eq("team", team)
     .single()
 
   if (timesheetError || !timesheet) {
@@ -244,12 +245,14 @@ const workerData = entry.worker as { id: string; name: string; trade: string } |
 // Get daily totals for a specific date
 export async function getDailyWorkerTotals(weekStart: string, workDate: string): Promise<DailyWorkerTotals> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
 
-  // Find the timesheet for this week
+  // Find the timesheet for this week and team
   const { data: timesheet, error: timesheetError } = await supabase
     .from("timesheets")
     .select("id")
     .eq("week_start", weekStart)
+    .eq("team", team)
     .single()
 
   if (timesheetError || !timesheet) {
@@ -433,11 +436,13 @@ export async function markReportCompleted(
 // Report Photos functions
 export async function getReportPhotos(weekStart: string, workDate?: string): Promise<ReportPhoto[]> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
 
   let query = supabase
     .from("report_photos")
     .select("*")
     .eq("week_start", weekStart)
+    .eq("team", team)
     .order("created_at", { ascending: false })
 
   if (workDate) {
@@ -461,6 +466,7 @@ export async function addReportPhoto(data: {
   caption?: string
 }): Promise<{ success: boolean; photo?: ReportPhoto; error?: string }> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
 
   const { data: photo, error } = await supabase
     .from("report_photos")
@@ -469,6 +475,7 @@ export async function addReportPhoto(data: {
       work_date: data.workDate,
       photo_pathname: data.photoPathname,
       caption: data.caption || null,
+      team: team,
     })
     .select()
     .single()
@@ -546,12 +553,14 @@ export async function deleteReportPhoto(photoId: string): Promise<{ success: boo
 // Daily Field Report functions
 export async function getDailyFieldReport(weekStart: string, workDate: string): Promise<DailyFieldReport | null> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
 
   const { data, error } = await supabase
     .from("daily_field_reports")
     .select("*")
     .eq("week_start", weekStart)
     .eq("work_date", workDate)
+    .eq("team", team)
     .single()
 
   if (error) {
@@ -581,6 +590,7 @@ export async function saveDailyFieldReport(data: {
   problemsNotes?: string
 }): Promise<{ success: boolean; report?: DailyFieldReport; error?: string }> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
 
   const upsertData = {
     week_start: data.weekStart,
@@ -594,11 +604,12 @@ export async function saveDailyFieldReport(data: {
     equipment: data.equipment || [],
     problems_notes: data.problemsNotes || null,
     updated_at: new Date().toISOString(),
+    team: team,
   }
 
   const { data: report, error } = await supabase
     .from("daily_field_reports")
-    .upsert(upsertData, { onConflict: "week_start,work_date" })
+    .upsert(upsertData, { onConflict: "week_start,work_date,team" })
     .select()
     .single()
 
@@ -662,6 +673,7 @@ function getLevelAbbreviation(level: string): string {
 // Get detailed weekly data for PDF export
 export async function getWeeklyPDFData(weekStartDate: Date): Promise<WeeklyPDFData | null> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
   
   const weekStartStr = weekStartDate.toISOString().split("T")[0]
   const weekEnd = new Date(weekStartDate)
@@ -676,11 +688,12 @@ export async function getWeeklyPDFData(weekStartDate: Date): Promise<WeeklyPDFDa
     weekDates.push(d.toISOString().split("T")[0])
   }
 
-  // Find the timesheet for this week
+  // Find the timesheet for this week and team
   const { data: timesheet, error: timesheetError } = await supabase
     .from("timesheets")
     .select("id")
     .eq("week_start", weekStartStr)
+    .eq("team", team)
     .single()
 
   if (timesheetError || !timesheet) {

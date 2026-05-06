@@ -10,20 +10,30 @@ import { Certifications } from "@/components/crew-timesheet/certifications"
 import { BottomNav } from "@/components/crew-timesheet/bottom-nav"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Loader2 } from "lucide-react"
+import { getCurrentUserTeam } from "@/app/actions/auth"
+import { type Team, DEFAULT_TEAM } from "@/lib/teams"
 
 export default function CrewTimesheetApp() {
   const [appReady, setAppReady] = useState(false)
   const [currentScreen, setCurrentScreen] = useState("dashboard")
+  const [userTeam, setUserTeam] = useState<Team>(DEFAULT_TEAM)
 
   useEffect(() => {
-    const savedScreen = localStorage.getItem("crew-current-screen")
-    if (savedScreen) {
-      setCurrentScreen(savedScreen)
-    }
+    const init = async () => {
+      const savedScreen = localStorage.getItem("crew-current-screen")
+      if (savedScreen) {
+        setCurrentScreen(savedScreen)
+      }
 
-    requestAnimationFrame(() => {
-      setAppReady(true)
-    })
+      // Fetch user's team
+      const team = await getCurrentUserTeam()
+      setUserTeam(team)
+
+      requestAnimationFrame(() => {
+        setAppReady(true)
+      })
+    }
+    init()
   }, [])
 
   useEffect(() => {
@@ -62,7 +72,7 @@ export default function CrewTimesheetApp() {
       case "certifications":
         return <Certifications />
       default:
-        return <Dashboard supervisorName="Victor Rodriguez" onNavigate={setCurrentScreen} />
+        return <Dashboard supervisorName="Victor Rodriguez" onNavigate={setCurrentScreen} team={userTeam} />
     }
   }
 

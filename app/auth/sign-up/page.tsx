@@ -7,12 +7,15 @@ import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Loader2, Mail, Lock, ShieldCheck } from 'lucide-react'
+import { Loader2, Mail, Lock, ShieldCheck, Users } from 'lucide-react'
+import { TEAMS, type Team, DEFAULT_TEAM } from '@/lib/teams'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [team, setTeam] = useState<Team>(DEFAULT_TEAM)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -43,6 +46,9 @@ export default function SignUpPage() {
           emailRedirectTo:
             process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
             `${window.location.origin}/auth/callback`,
+          data: {
+            team: team,
+          },
         },
       })
       if (error) throw error
@@ -115,6 +121,25 @@ export default function SignUpPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"
               />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="team" className="text-foreground">Select Crew / Team</Label>
+            <div className="relative">
+              <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+              <Select value={team} onValueChange={(value) => setTeam(value as Team)}>
+                <SelectTrigger className="pl-10 bg-card border-border text-foreground">
+                  <SelectValue placeholder="Select your crew" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {TEAMS.map((t) => (
+                    <SelectItem key={t} value={t} className="text-foreground">
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

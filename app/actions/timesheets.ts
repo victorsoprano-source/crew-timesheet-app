@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { getCurrentUserTeam } from "@/app/actions/auth"
 
 export interface Timesheet {
   id: string
@@ -46,6 +47,7 @@ function getWeekStart(date: Date): Date {
 
 export async function getOrCreateTimesheet(weekStart: Date): Promise<Timesheet | null> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
   
   // Format dates
   const startStr = weekStart.toISOString().split("T")[0]
@@ -53,24 +55,26 @@ export async function getOrCreateTimesheet(weekStart: Date): Promise<Timesheet |
   weekEnd.setDate(weekEnd.getDate() + 6)
   const endStr = weekEnd.toISOString().split("T")[0]
 
-  // Try to find existing timesheet
+  // Try to find existing timesheet for this team
   const { data: existing } = await supabase
     .from("timesheets")
     .select("*")
     .eq("week_start", startStr)
+    .eq("team", team)
     .single()
 
   if (existing) {
     return existing
   }
 
-  // Create new timesheet
+  // Create new timesheet for this team
   const { data, error } = await supabase
     .from("timesheets")
     .insert({
       week_start: startStr,
       week_end: endStr,
       status: "pending",
+      team: team,
     })
     .select()
     .single()
@@ -241,12 +245,14 @@ export async function deleteTimesheetEntry(
 
 export async function getTotalHoursForWeek(weekStart: Date): Promise<number> {
   const supabase = await createClient()
+  const team = await getCurrentUserTeam()
   const startStr = weekStart.toISOString().split("T")[0]
 
   const { data: timesheet } = await supabase
     .from("timesheets")
     .select("id")
     .eq("week_start", startStr)
+    .eq("team", team)
     .single()
 
   if (!timesheet) return 0
