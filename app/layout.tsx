@@ -29,8 +29,8 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: '/icons/icon-512x512.jpg',
-    apple: '/apple-touch-icon.jpg',
+    icon: '/icon-512x512.png',
+    apple: '/apple-touch-icon.png',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -49,7 +49,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#0b2f1f" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.jpg" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         {/* Critical inline styles to prevent flash of unstyled content */}
         <style dangerouslySetInnerHTML={{ __html: `
           /* Ahern Painting Contractors Inc. - Base dark theme colors */
