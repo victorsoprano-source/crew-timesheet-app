@@ -10,15 +10,15 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/icons/icon-512x512.jpg",
+      "src": "/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.jpg",
+      "src": "/apple-touch-icon.png",
       "sizes": "180x180",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     }
   ]
